@@ -1,0 +1,22 @@
+# Build output
+build/
+build-*/
+wasm/build/
+wasm/build-*/
+*.o
+*.obj
+*.wasm
+
+# Local configuration
+.env
+.env.*
+!.env.example
+.netlify/
+.engine/
+dist/
+
+# IDE / OS
+.vs/
+.vscode/
+.DS_Store
+Thumbs.db

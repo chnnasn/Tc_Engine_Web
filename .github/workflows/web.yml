@@ -1,0 +1,53 @@
+name: Build Web
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 * * * *"
+  repository_dispatch:
+    types: [tomcat-engine-updated]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test bridge/tomcat-bridge.test.mjs
+
+  build-wasm:
+    runs-on: ubuntu-latest
+    container: emscripten/emsdk:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned engine
+        run: python3 scripts/fetch_engine.py
+      - name: Configure
+        run: emcmake cmake -S wasm -B build/wasm -DTOMCAT_WEB_EMSCRIPTEN=ON -DTOMCAT_ENGINE_SOURCE=$GITHUB_WORKSPACE/.engine/TomCat_Engine
+      - name: Build
+        run: cmake --build build/wasm --config Release
+      - name: Assemble site
+        run: |
+          mkdir -p dist/runtime
+          cp -R wasm/public/. dist/
+          cp build/wasm/tomcat_web_module.js dist/runtime/
+          cp build/wasm/tomcat_web_module.wasm dist/runtime/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tc-engine-web
+          path: dist
+      - name: Deploy to Netlify
+        if: ${{ (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || github.event_name != 'push') }}
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          if [ -n "$NETLIFY_AUTH_TOKEN" ] && [ -n "$NETLIFY_SITE_ID" ]; then
+            npx --yes netlify-cli deploy --dir=dist --prod
+          else
+            echo "Netlify secrets are not configured; skipping deployment."
+          fi
