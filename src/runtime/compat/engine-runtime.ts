@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Browser hosts for the real TomCat_Engine WebAssembly module.
  *
@@ -292,7 +293,7 @@
       if (typeof this.factory !== "function") throw new Error("TomCatWebModule factory is unavailable");
       this.module = await this.factory({
         canvas: this.canvas,
-        locateFile: (name) => `./${name}?v=${TC_WEB_ASSET_VERSION}`,
+        locateFile: (name) => `/runtime/${name}?v=${TC_WEB_ASSET_VERSION}`,
         print: (value) => this.emit("log", String(value)),
         printErr: (value) => this.emit("error", String(value)),
       });

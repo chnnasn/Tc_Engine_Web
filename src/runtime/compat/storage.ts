@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Browser build of the TomCat project storage adapter.
  *

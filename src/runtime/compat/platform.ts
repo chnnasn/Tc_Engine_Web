@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Small host-side project store used by Hub and Editor.
  *

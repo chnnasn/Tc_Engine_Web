@@ -1,11 +1,11 @@
 # Web 迁移边界与运行协议
 
-TomCat 的桌面实现继续由 `TomCat/`、GLFW 和 OpenGL 驱动；Web 目标不改这些核心文件，而是在 `web/wasm` 提供同一套最小能力的适配层。适配层是唯一与浏览器 API、Emscripten 和虚拟文件系统交互的地方。
+TomCat 的桌面实现继续由上游 `TomCat/`、GLFW 和 OpenGL 驱动；Web 目标不改这些核心文件。页面由 `src/` 中的 React + TypeScript 组件渲染，WASM 适配器是唯一与 Emscripten 和虚拟文件系统交互的地方。
 
 ## 生命周期
 
 ```text
-Hub/Editor UI -> WebBridge.dispatch(command)
+React Hub/Editor -> WebBridge.dispatch(command)
                  -> Registry adapter (scene/assets/input/storage)
                  -> C++ bridge / existing engine facade
                  -> Bridge.emit(event)

@@ -5,11 +5,9 @@ TomCat Engine 的独立 Web 兼容层、Hub 和 Editor。C++ 引擎仓库作为�
 ## 目录
 
 ```text
-bridge/          Web、WASM、GLFW 双向通信与测试
-hub/             Hub 源文件
-editor/          Editor 源文件
-shared/          Hub 与 Editor 共用资源
-wasm/            Emscripten 构建、引擎 Web 运行时入口和发布目录
+src/              React + Vite + TypeScript 页面、组件和运行时适配器
+bridge/           Web、WASM、GLFW 双向通信与测试
+wasm/             Emscripten 构建、WASM 资源和运行时产物
 port/            应用在上游 main 之上的确定性 Web 移植补丁
 scripts/         上游拉取脚本
 engine.lock      上游仓库及跟踪分支
@@ -19,18 +17,15 @@ netlify.toml     Netlify 发布配置
 ## 本地预览
 
 ```powershell
-python -m http.server 8080 --directory wasm/public
+npm install
+npm run dev
 ```
 
-打开 `http://localhost:8080/`，默认进入 Hub。`/hub/` 渲染的是与桌面端同一份
-Builder/Manager（TomCatHub）源码编译出的 WebAssembly 界面，不是网页仿制；
-项目的项目列表、新建项目、模板/编辑器版本选择、设置等都由上游 ExampleLayer
-直接在浏览器虚拟文件系统上完成。Hub 里双击项目会跳转到 `/runtime/`，同一份
-项目文件（`/tomcat/Projects/<项目名>/Project.tcproj` 及其 `Assets` 场景树）被
-同一个 WASM 模块里的上游 EditorLayer 打开。
+打开 Vite 地址后，React Hub 负责登录、项目、资源和工作区管理；打开项目会进入
+React 托管的 `/editor/` 页面，由同一个上游 WebAssembly 模块启动 EditorLayer。
+React 组件只负责页面状态与桥接，场景渲染、序列化和运行预览仍由上游引擎完成。
 
-浏览器还保留了旧的富管理台（项目统计、资源库、活动），入口为 `/manage/`；
-它读写与 Hub/Editor 相同的本地注册表，因此两边看到的是同一批项目。
+`/manage/` 由 React 渲染工作区设置和用户会话，不再存在原生 Hub/Editor 管理页面。
 
 ## 拉取上游引擎
 
@@ -48,6 +43,7 @@ python scripts/fetch_engine.py
 python scripts/fetch_engine.py
 emcmake cmake -S wasm -B build/wasm -DTOMCAT_WEB_EMSCRIPTEN=ON -DTOMCAT_ENGINE_SOURCE=.engine/TomCat_Engine
 cmake --build build/wasm --config Release
+npm run build
 ```
 
 流水线执行相同流程，并上传包含 Hub、Editor 和 WASM 模块的静态站点产物。
@@ -58,7 +54,7 @@ cmake --build build/wasm --config Release
 
 ## 部署
 
-- Netlify 发布目录：`wasm/public`
+- Netlify 发布目录：`dist`
 - GitHub Actions Secrets：`NETLIFY_AUTH_TOKEN`、`NETLIFY_SITE_ID`
 - 未配置 Netlify Secrets 时，流水线仍会完成测试、WASM 构建和 artifact 上传，但不会发布线上站点。
 

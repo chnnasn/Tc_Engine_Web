@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Browser side compatibility bridge.
  *

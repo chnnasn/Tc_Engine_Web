@@ -19,6 +19,8 @@ wasm/public/runtime/tomcat_web_module.data
 .netlify/
 .engine/
 dist/
+node_modules/
+*.tsbuildinfo
 
 # IDE / OS
 .vs/

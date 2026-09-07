@@ -1,8 +1,8 @@
 [build]
-  publish = "wasm/public"
+publish = "dist"
 
 [[headers]]
-  for = "/*.wasm"
+  for = "/runtime/*.wasm"
   [headers.values]
     Content-Type = "application/wasm"
 
