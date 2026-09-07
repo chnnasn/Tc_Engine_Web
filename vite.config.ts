@@ -22,7 +22,7 @@ function copyWasmRuntime() {
         }
       }
       if (existsSync(sourceShared)) {
-        for (const file of ['favicon.svg']) {
+        for (const file of ['favicon.ico']) {
           if (existsSync(resolve(sourceShared, file))) cpSync(resolve(sourceShared, file), resolve(outShared, file))
         }
       }
