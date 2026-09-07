@@ -197,6 +197,46 @@ if(TOMCAT_WEB_EMSCRIPTEN)
   file(COPY "${TC_ASSETS_SOURCE}"
        DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/runtime-assets")
 
+  # A real CJK font is required for the browser UI: OpenSans has no Chinese
+  # glyphs, and desktop-only Windows fonts are not available in the Linux
+  # emscripten CI image.  Download Noto Sans CJK SC (SIL OFL 1.1) on first
+  # configure, with the local Windows SimHei as a development fallback.
+  set(TC_CJK_FONT_DIR "${TC_ASSETS_DIR}/Packages/fonts/cjk")
+  file(MAKE_DIRECTORY "${TC_CJK_FONT_DIR}")
+  set(TC_CJK_FONT "${TC_CJK_FONT_DIR}/TomCat-CJK.ttf")
+  if(NOT EXISTS "${TC_CJK_FONT}")
+    set(TC_CJK_READY FALSE)
+    foreach(TC_CJK_URL
+        "https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf"
+        "https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf")
+      file(DOWNLOAD "${TC_CJK_URL}" "${TC_CJK_FONT}" TIMEOUT 300 STATUS TC_CJK_STATUS)
+      list(GET TC_CJK_STATUS 0 TC_CJK_CODE)
+      if(TC_CJK_CODE EQUAL 0 AND EXISTS "${TC_CJK_FONT}")
+        set(TC_CJK_READY TRUE)
+        message(STATUS "Downloaded Noto Sans CJK SC for the Web UI fonts")
+        break()
+      endif()
+    endforeach()
+    if(NOT TC_CJK_READY)
+      foreach(TC_CJK_SYSTEM_FONT
+          "C:/Windows/Fonts/simhei.ttf"
+          "C:/Windows/Fonts/msyh.ttc"
+          "C:/Windows/Fonts/simsun.ttc")
+        if(EXISTS "${TC_CJK_SYSTEM_FONT}")
+          get_filename_component(TC_CJK_SYSTEM_NAME "${TC_CJK_SYSTEM_FONT}" NAME)
+          file(COPY "${TC_CJK_SYSTEM_FONT}" DESTINATION "${TC_CJK_FONT_DIR}")
+          file(RENAME "${TC_CJK_FONT_DIR}/${TC_CJK_SYSTEM_NAME}" "${TC_CJK_FONT}")
+          set(TC_CJK_READY TRUE)
+          message(STATUS "Using local ${TC_CJK_SYSTEM_NAME} for the Web UI fonts")
+          break()
+        endif()
+      endforeach()
+    endif()
+    if(NOT TC_CJK_READY)
+      message(WARNING "No CJK font available; Chinese UI text will not render")
+    endif()
+  endif()
+
   target_compile_options(tomcat_engine_core PRIVATE -fexceptions)
   target_compile_options(tomcat_engine_core PUBLIC "-sUSE_GLFW=3")
 

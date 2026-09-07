@@ -10,6 +10,10 @@
 (function (global) {
   "use strict";
 
+  // Bump whenever preloaded assets change so browsers never serve a stale
+  // cached .js/.wasm/.data triple (the three files share one basename).
+  const TC_WEB_ASSET_VERSION = "20260907-cjk";
+
   const finite = (value, fallback = 0) => {
     const number = Number(value);
     return Number.isFinite(number) ? number : fallback;
@@ -288,7 +292,7 @@
       if (typeof this.factory !== "function") throw new Error("TomCatWebModule factory is unavailable");
       this.module = await this.factory({
         canvas: this.canvas,
-        locateFile: (name) => `./${name}`,
+        locateFile: (name) => `./${name}?v=${TC_WEB_ASSET_VERSION}`,
         print: (value) => this.emit("log", String(value)),
         printErr: (value) => this.emit("error", String(value)),
       });
@@ -393,7 +397,7 @@
       if (typeof this.factory !== "function") throw new Error("TomCatWebModule factory is unavailable");
       this.module = await this.factory({
         canvas: this.canvas,
-        locateFile: (name) => `${this.modulePath}${name}`,
+        locateFile: (name) => `${this.modulePath}${name}?v=${TC_WEB_ASSET_VERSION}`,
         print: (value) => this.emit("log", String(value)),
         printErr: (value) => this.emit("error", String(value)),
       });
