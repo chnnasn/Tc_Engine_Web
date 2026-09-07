@@ -1,0 +1,1115 @@
+diff --git a/TomCat/src/TomCat/Core/Base.h b/TomCat/src/TomCat/Core/Base.h
+index ddf8173..70c6908 100644
+--- a/TomCat/src/TomCat/Core/Base.h
++++ b/TomCat/src/TomCat/Core/Base.h
+@@ -42,14 +42,18 @@
+ 	#define TC_PLATFORM_LINUX
+ 	#error "Linux is not supported!"
+ 
++#elif defined(__EMSCRIPTEN__)
++	#define TC_PLATFORM_WEB
++
+ #else
+ 		/* Unknown compiler/platform */
+ 	#error "Unknown platform!"
+ #endif // End of platform detection
+ 
+-// DLL support
+-#ifdef TC_PLATFORM_WINDOWS
+-	#if TC_DYNAMIC_LINK
++// DLL support.  Emscripten builds a static archive and never uses the
++// Windows import/export decorations.
++#if defined(TC_PLATFORM_WINDOWS)
++	#ifdef TC_DYNAMIC_LINK
+ 		#ifdef TC_BUILD_DLL
+ 			#define TomCat_API __declspec(dllexport)
+ 		#else
+@@ -59,8 +63,8 @@
+ 		#define TomCat_API
+ 	#endif
+ #else
+-	#error TomCat only supports Windows!
+-#endif // End of DLL support
++	#define TomCat_API
++#endif
+ 
+ #ifdef TC_Core_Assert
+ 		#define TC_Assert(x, ...) { if(!(x)) { TC_Error("Assertion Failed: {0}", __VA_ARGS__); __debugbreak(); } }
+diff --git a/TomCat/src/TomCat/Core/UUID.h b/TomCat/src/TomCat/Core/UUID.h
+index 18e59f2..ddbd8c2 100644
+--- a/TomCat/src/TomCat/Core/UUID.h
++++ b/TomCat/src/TomCat/Core/UUID.h
+@@ -1,6 +1,6 @@
+ #pragma once
+ 
+-#include <xhash>
++#include <functional>
+ 
+ namespace TomCat {
+ 
+@@ -29,4 +29,4 @@ namespace std {
+ 		}
+ 	};
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/TomCat/src/TomCat/Events/Event.h b/TomCat/src/TomCat/Events/Event.h
+index 4b63a81..44dc5ad 100644
+--- a/TomCat/src/TomCat/Events/Event.h
++++ b/TomCat/src/TomCat/Events/Event.h
+@@ -32,7 +32,7 @@ namespace TomCat {
+ 
+ 	};
+ 
+-#define Event_Class_Type(type) static EventType GetStaticType() { return EventType::##type; }\
++#define Event_Class_Type(type) static EventType GetStaticType() { return EventType::type; }\
+ 								virtual EventType GetEventType() const override { return GetStaticType(); }\
+ 								virtual const char* GetName() const override { return #type; }
+ 
+diff --git a/TomCat/src/TomCat/Renderer/Renderer2D.cpp b/TomCat/src/TomCat/Renderer/Renderer2D.cpp
+index 581983d..5fac0eb 100644
+--- a/TomCat/src/TomCat/Renderer/Renderer2D.cpp
++++ b/TomCat/src/TomCat/Renderer/Renderer2D.cpp
+@@ -106,7 +106,7 @@ void Renderer2D::Init()
+ 		for (uint32_t i = 0; i < s_Data.MaxTextureSlots; i++)
+ 			samplers[i] = i;
+ 
+-		s_Data.TextureShader = Shader::Create("Packages/shaders/Texture.glsl");
++		s_Data.TextureShader = Shader::Create("Packages/Shaders/Texture.glsl");
+ 
+ 
+ 		// Set first texture slot to 0
+@@ -185,6 +185,14 @@ void Renderer2D::Init()
+ 			s_Data.TextureSlots[i]->Bind(i);
+ 
+ 		s_Data.TextureShader->Bind();
++
++		// WebGL2 sampler uniforms default to texture unit 0; assign the units
++		// actually used by this batch before drawing.
++		int32_t samplers[Renderer2DData::MaxTextureSlots];
++		for (uint32_t i = 0; i < s_Data.TextureSlotIndex; i++)
++			samplers[i] = (int32_t)i;
++		s_Data.TextureShader->SetIntArray("u_Textures", samplers, s_Data.TextureSlotIndex);
++
+ 		RenderCommand::DrawIndexed(s_Data.QuadVertexArray, s_Data.QuadIndexCount);
+ 		s_Data.Stats.DrawCalls++;
+ 	}
+@@ -486,4 +494,4 @@ void Renderer2D::Init()
+ 		s_UseBatching = originalUseBatching;
+ 	}
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/TomCat/src/platform/OpenGL/OpenGLBuffer.cpp b/TomCat/src/platform/OpenGL/OpenGLBuffer.cpp
+index 52b90a8..66be41e 100644
+--- a/TomCat/src/platform/OpenGL/OpenGLBuffer.cpp
++++ b/TomCat/src/platform/OpenGL/OpenGLBuffer.cpp
+@@ -1,7 +1,11 @@
+ #include "tcpch.h"
+ #include"OpenGLBuffer.h"
+ 
++#ifdef __EMSCRIPTEN__
++#include <GLES3/gl3.h>
++#else
+ #include<glad/glad.h>
++#endif
+ 
+ namespace TomCat {
+ 
+@@ -9,7 +13,11 @@ namespace TomCat {
+ 	{
+ 		TC_PROFILE_FUNCTION();
+ 
++#ifdef __EMSCRIPTEN__
++		glGenBuffers(1, &m_RendererID);
++#else
+ 		glCreateBuffers(1, &m_RendererID);
++#endif
+ 
+ 		glBindBuffer(GL_ARRAY_BUFFER, m_RendererID);
+ 
+@@ -21,7 +29,11 @@ namespace TomCat {
+ 	{
+ 		TC_PROFILE_FUNCTION();
+ 
++#ifdef __EMSCRIPTEN__
++		glGenBuffers(1,&m_RendererID);
++#else
+ 		glCreateBuffers(1,&m_RendererID);
++#endif
+ 
+ 		glBindBuffer(GL_ARRAY_BUFFER, m_RendererID);
+ 
+@@ -65,7 +77,11 @@ namespace TomCat {
+ 	{
+ 		TC_PROFILE_FUNCTION();
+ 
++#ifdef __EMSCRIPTEN__
++		glGenBuffers(1,&m_RendererID);
++#else
+ 		glCreateBuffers(1,&m_RendererID);
++#endif
+ 
+ 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_RendererID);
+ 
+@@ -98,4 +114,4 @@ namespace TomCat {
+ 	}
+ 
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/TomCat/src/platform/OpenGL/OpenGLContext.cpp b/TomCat/src/platform/OpenGL/OpenGLContext.cpp
+index 733ede4..baa10a0 100644
+--- a/TomCat/src/platform/OpenGL/OpenGLContext.cpp
++++ b/TomCat/src/platform/OpenGL/OpenGLContext.cpp
+@@ -4,7 +4,11 @@
+ 
+ #include <GLFW/glfw3.h>
+ 
++#ifdef __EMSCRIPTEN__
++#include <GLES3/gl3.h>
++#else
+ #include <Glad/glad.h>
++#endif
+ 
+ namespace TomCat {
+ 
+@@ -19,21 +23,27 @@ namespace TomCat {
+ 		TC_PROFILE_FUNCTION();
+ 
+ 		glfwMakeContextCurrent(m_WindowHandle);
++#ifdef __EMSCRIPTEN__
++		// Emscripten links GLES3/WebGL2 directly; there is no desktop loader.
++#else
+ 		int status = gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
+ 		TC_Core_Assert(status, "初始化Glad失败");
++#endif
+ 
+ 		TC_Core_Info("OpenGL Info");
+ 		TC_Core_Info("Vendor: {0}", reinterpret_cast<const char*>(glGetString(GL_VENDOR)));
+ 		TC_Core_Info("Renderer: {0}", reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
+ 		TC_Core_Info("Version: {0}", reinterpret_cast<const char*>(glGetString(GL_VERSION)));
+ 
+-	#ifdef TC_ENABLE_ASSERTS
++	#ifndef __EMSCRIPTEN__
++		#ifdef TC_ENABLE_ASSERTS
+ 			int versionMajor;
+ 			int versionMinor;
+ 			glGetIntegerv(GL_MAJOR_VERSION, &versionMajor);
+ 			glGetIntegerv(GL_MINOR_VERSION, &versionMinor);
+ 
+ 			TC_Core_Assert(versionMajor > 4 || (versionMajor == 4 && versionMinor >= 5), "Hazel requires at least OpenGL version 4.5!");
++		#endif
+ 	#endif
+ 
+ 	}
+@@ -46,4 +56,4 @@ namespace TomCat {
+ 
+ 	}
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/TomCat/src/platform/OpenGL/OpenGLRendererAPI.cpp b/TomCat/src/platform/OpenGL/OpenGLRendererAPI.cpp
+index 0bf0f18..3b82f61 100644
+--- a/TomCat/src/platform/OpenGL/OpenGLRendererAPI.cpp
++++ b/TomCat/src/platform/OpenGL/OpenGLRendererAPI.cpp
+@@ -2,7 +2,11 @@
+ 
+ #include"OpenGLRendererAPI.h"
+ 
++#ifdef __EMSCRIPTEN__
++#include <GLES3/gl3.h>
++#else
+ #include<glad/glad.h>
++#endif
+ 
+ namespace TomCat {
+ 
+@@ -33,9 +37,9 @@ namespace TomCat {
+ 
+ 	void OpenGLRendererAPI::DrawIndexed(const Ref<VertexArray>& vertexArray, uint32_t indexCount)
+ 	{
+-		uint32_t count = indexCount ? vertexArray->GetIndexBuffer()->GetCount() : indexCount;
++		uint32_t count = indexCount ? indexCount : vertexArray->GetIndexBuffer()->GetCount();
+ 		glDrawElements(GL_TRIANGLES, count, GL_UNSIGNED_INT, nullptr);
+ 		glBindTexture(GL_TEXTURE_2D, 0);
+ 	}
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/TomCat/src/platform/OpenGL/OpenGLShader.cpp b/TomCat/src/platform/OpenGL/OpenGLShader.cpp
+index eccf203..5b8b2ee 100644
+--- a/TomCat/src/platform/OpenGL/OpenGLShader.cpp
++++ b/TomCat/src/platform/OpenGL/OpenGLShader.cpp
+@@ -1,112 +1,70 @@
+ #include "tcpch.h"
+ #include "Platform/OpenGL/OpenGLShader.h"
+ 
+-#include <fstream>
++#ifdef __EMSCRIPTEN__
++#include <GLES3/gl3.h>
++#else
+ #include <glad/glad.h>
++#endif
+ 
++#include <fstream>
+ #include <glm/gtc/type_ptr.hpp>
++#include <sstream>
+ 
+-#include <shaderc/shaderc.hpp>
+-#include <spirv_cross/spirv_cross.hpp>
+-#include <spirv_cross/spirv_glsl.hpp>
+-
+-#include <filesystem>
++namespace TomCat {
+ 
+-#include "TomCat/Core/Timer.h"
++	static GLenum ShaderTypeFromString(const std::string& type)
++	{
++		if (type == "vertex")
++			return GL_VERTEX_SHADER;
++		if (type == "fragment" || type == "pixel")
++			return GL_FRAGMENT_SHADER;
+ 
+-namespace TomCat {
++		TC_Core_Assert(false, "Unknown shader type!");
++		return 0;
++	}
+ 
+ 	namespace Utils {
++		static const char* GetCacheDirectory() { return "Packages/cache/shader/opengl"; }
++	}
+ 
+-		static GLenum ShaderTypeFromString(const std::string& type)
+-		{
+-			if (type == "vertex")
+-				return GL_VERTEX_SHADER;
+-			if (type == "fragment" || type == "pixel")
+-				return GL_FRAGMENT_SHADER;
++	OpenGLShader::OpenGLShader(const std::string& filepath)
++		: m_FilePath(filepath)
++	{
++		TC_PROFILE_FUNCTION();
+ 
+-			TC_Core_Assert(false, "Unknown shader type!");
+-			return 0;
+-		}
++		std::string source = ReadFile(filepath);
+ 
+-		static shaderc_shader_kind GLShaderStageToShaderC(GLenum stage)
+-		{
+-			switch (stage)
+-			{
+-			case GL_VERTEX_SHADER:   return shaderc_glsl_vertex_shader;
+-			case GL_FRAGMENT_SHADER: return shaderc_glsl_fragment_shader;
+-			}
+-			TC_Core_Assert(false);
+-			return (shaderc_shader_kind)0;
+-		}
++		std::string vertexSource;
++		std::string fragmentSource;
++		std::istringstream stream(source);
++		std::string line;
++		GLenum currentType = 0;
+ 
+-		static const char* GLShaderStageToString(GLenum stage)
++		while (std::getline(stream, line))
+ 		{
+-			switch (stage)
++			if (line.find("#type") == 0)
+ 			{
+-			case GL_VERTEX_SHADER:   return "GL_VERTEX_SHADER";
+-			case GL_FRAGMENT_SHADER: return "GL_FRAGMENT_SHADER";
++				std::string typeName = line.substr(6);
++				while (!typeName.empty() && (typeName.back() == '\r' || typeName.back() == ' ' || typeName.back() == '\t'))
++					typeName.pop_back();
++				currentType = ShaderTypeFromString(typeName);
++				continue;
+ 			}
+-			TC_Core_Assert(false);
+-			return nullptr;
+-		}
+-
+-		static const char* GetCacheDirectory()
+-		{
+-			// TODO: make sure the assets directory is valid
+-			return "Packages/cache/shader/opengl";
+-		}
+-
+-		static void CreateCacheDirectoryIfNeeded()
+-		{
+-			std::string cacheDirectory = GetCacheDirectory();
+-			if (!std::filesystem::exists(cacheDirectory))
+-				std::filesystem::create_directories(cacheDirectory);
+-		}
+ 
+-		static const char* GLShaderStageCachedOpenGLFileExtension(uint32_t stage)
+-		{
+-			switch (stage)
+-			{
+-			case GL_VERTEX_SHADER:    return ".cached_opengl.vert";
+-			case GL_FRAGMENT_SHADER:  return ".cached_opengl.frag";
+-			}
+-			TC_Core_Assert(false);
+-			return "";
++			if (currentType == GL_VERTEX_SHADER)
++				vertexSource += line + "\n";
++			else if (currentType == GL_FRAGMENT_SHADER)
++				fragmentSource += line + "\n";
+ 		}
+ 
+-		static const char* GLShaderStageCachedVulkanFileExtension(uint32_t stage)
++		if (vertexSource.empty() || fragmentSource.empty())
+ 		{
+-			switch (stage)
+-			{
+-			case GL_VERTEX_SHADER:    return ".cached_vulkan.vert";
+-			case GL_FRAGMENT_SHADER:  return ".cached_vulkan.frag";
+-			}
+-			TC_Core_Assert(false);
+-			return "";
++			TC_Core_Error("Shader '{0}' is missing a vertex or fragment stage", filepath);
++			return;
+ 		}
+ 
+-
+-	}
+-
+-	OpenGLShader::OpenGLShader(const std::string& filepath)
+-		: m_FilePath(filepath)
+-	{
+-		TC_PROFILE_FUNCTION();
+-
+-		Utils::CreateCacheDirectoryIfNeeded();
+-
+-		std::string source = ReadFile(filepath);
+-		auto shaderSources = PreProcess(source);
+-
+-		{
+-			Timer timer;
+-			CompileOrGetVulkanBinaries(shaderSources);
+-			CompileOrGetOpenGLBinaries();
+-			CreateProgram();
+-			TC_Core_Warn("Shader creation took {0} ms", timer.ElapsedMillis());
+-			
+-		}
++		CreateProgram(ToGLES3(vertexSource, false), ToGLES3(fragmentSource, true));
+ 
+ 		// Extract name from filepath
+ 		auto lastSlash = filepath.find_last_of("/\\");
+@@ -121,20 +79,15 @@ namespace TomCat {
+ 	{
+ 		TC_PROFILE_FUNCTION();
+ 
+-		std::unordered_map<GLenum, std::string> sources;
+-		sources[GL_VERTEX_SHADER] = vertexSrc;
+-		sources[GL_FRAGMENT_SHADER] = fragmentSrc;
+-
+-		CompileOrGetVulkanBinaries(sources);
+-		CompileOrGetOpenGLBinaries();
+-		CreateProgram();
++		CreateProgram(ToGLES3(vertexSrc, false), ToGLES3(fragmentSrc, true));
+ 	}
+ 
+ 	OpenGLShader::~OpenGLShader()
+ 	{
+ 		TC_PROFILE_FUNCTION();
+ 
+-		glDeleteProgram(m_RendererID);
++		if (m_RendererID)
++			glDeleteProgram(m_RendererID);
+ 	}
+ 
+ 	std::string OpenGLShader::ReadFile(const std::string& filepath)
+@@ -142,12 +95,12 @@ namespace TomCat {
+ 		TC_PROFILE_FUNCTION();
+ 
+ 		std::string result;
+-		std::ifstream in(filepath, std::ios::in | std::ios::binary); // ifstream closes itself due to RAII
++		std::ifstream in(filepath, std::ios::in | std::ios::binary);
+ 		if (in)
+ 		{
+ 			in.seekg(0, std::ios::end);
+ 			size_t size = in.tellg();
+-			if (size != -1)
++			if (size != static_cast<size_t>(-1))
+ 			{
+ 				result.resize(size);
+ 				in.seekg(0, std::ios::beg);
+@@ -166,320 +119,187 @@ namespace TomCat {
+ 		return result;
+ 	}
+ 
+-	std::unordered_map<GLenum, std::string> OpenGLShader::PreProcess(const std::string& source)
++	std::string OpenGLShader::ToGLES3(const std::string& source, bool fragment) const
+ 	{
+-		TC_PROFILE_FUNCTION();
++		std::string converted = source;
+ 
+-		std::unordered_map<GLenum, std::string> shaderSources;
+-
+-		const char* typeToken = "#type";
+-		size_t typeTokenLength = strlen(typeToken);
+-		size_t pos = source.find(typeToken, 0); //Start of shader type declaration line
+-		while (pos != std::string::npos)
++		// TomCat shaders target desktop GLSL; WebGL2 accepts GLSL ES 3.00.
++		for (const char* desktopVersion : { "#version 450 core", "#version 410 core", "#version 330 core" })
+ 		{
+-			size_t eol = source.find_first_of("\r\n", pos); //End of shader type declaration line
+-			TC_Core_Assert(eol != std::string::npos, "Syntax error");
+-			size_t begin = pos + typeTokenLength + 1; //Start of shader type name (after "#type " keyword)
+-			std::string type = source.substr(begin, eol - begin);
+-			TC_Core_Assert(Utils::ShaderTypeFromString(type), "Invalid shader type specified");
+-
+-			size_t nextLinePos = source.find_first_not_of("\r\n", eol); //Start of shader code after shader type declaration line
+-			TC_Core_Assert(nextLinePos != std::string::npos, "Syntax error");
+-			pos = source.find(typeToken, nextLinePos); //Start of next shader type declaration line
+-
+-			shaderSources[Utils::ShaderTypeFromString(type)] = (pos == std::string::npos) ? source.substr(nextLinePos) : source.substr(nextLinePos, pos - nextLinePos);
++			size_t at = converted.find(desktopVersion);
++			if (at != std::string::npos)
++				converted.replace(at, strlen(desktopVersion), "#version 300 es");
+ 		}
+ 
+-		return shaderSources;
+-	}
+-
+-	void OpenGLShader::CompileOrGetVulkanBinaries(const std::unordered_map<GLenum, std::string>& shaderSources)
+-	{
+-		GLuint program = glCreateProgram();
+-
+-		shaderc::Compiler compiler;
+-		shaderc::CompileOptions options;
+-		options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_2);
+-		const bool optimize = true;
+-		if (optimize)
+-			options.SetOptimizationLevel(shaderc_optimization_level_performance);
+-
+-		std::filesystem::path cacheDirectory = Utils::GetCacheDirectory();
+-
+-		auto& shaderData = m_VulkanSPIRV;
+-		shaderData.clear();
+-		for (auto&& [stage, source] : shaderSources)
++		// Precision qualifiers are required in fragment shaders.
++		if (fragment)
+ 		{
+-			std::filesystem::path shaderFilePath = m_FilePath;
+-			std::filesystem::path cachedPath = cacheDirectory / (shaderFilePath.filename().string() + Utils::GLShaderStageCachedVulkanFileExtension(stage));
++			size_t versionEnd = converted.find('\n');
++			if (versionEnd != std::string::npos)
++				converted.insert(versionEnd + 1, "precision highp float;\n");
++		}
+ 
+-			std::ifstream in(cachedPath, std::ios::in | std::ios::binary);
+-			if (in.is_open())
++		// Uniform block binding and sampler bindings are desktop GL 4.2+
++		// qualifiers.  Bind the block and the sampler units programmatically.
++		{
++			const char* blockBinding = "layout(std140, binding = 0)";
++			size_t at = converted.find(blockBinding);
++			while (at != std::string::npos)
+ 			{
+-				in.seekg(0, std::ios::end);
+-				auto size = in.tellg();
+-				in.seekg(0, std::ios::beg);
+-
+-				auto& data = shaderData[stage];
+-				data.resize(size / sizeof(uint32_t));
+-				in.read((char*)data.data(), size);
++				converted.replace(at, strlen(blockBinding), "layout(std140)");
++				at = converted.find(blockBinding, at + 1);
+ 			}
+-			else
++		}
++		{
++			const char* samplerBinding = "layout (binding = 0) uniform";
++			size_t at = converted.find(samplerBinding);
++			while (at != std::string::npos)
++			{
++				converted.erase(at, strlen(samplerBinding));
++				converted.insert(at, "uniform");
++				at = converted.find(samplerBinding, at + 1);
++			}
++		}
++		{
++			const char* samplerBindingTight = "layout(binding = 0) uniform";
++			size_t at = converted.find(samplerBindingTight);
++			while (at != std::string::npos)
+ 			{
+-				shaderc::SpvCompilationResult module = compiler.CompileGlslToSpv(source, Utils::GLShaderStageToShaderC(stage), m_FilePath.c_str(), options);
+-				if (module.GetCompilationStatus() != shaderc_compilation_status_success)
+-				{
+-					TC_Core_Error(module.GetErrorMessage());
+-					TC_Core_Assert(false);
+-				}
+-
+-				shaderData[stage] = std::vector<uint32_t>(module.cbegin(), module.cend());
+-
+-				std::ofstream out(cachedPath, std::ios::out | std::ios::binary);
+-				if (out.is_open())
+-				{
+-					auto& data = shaderData[stage];
+-					out.write((char*)data.data(), data.size() * sizeof(uint32_t));
+-					out.flush();
+-					out.close();
+-				}
++				converted.erase(at, strlen(samplerBindingTight));
++				converted.insert(at, "uniform");
++				at = converted.find(samplerBindingTight, at + 1);
+ 			}
+ 		}
+ 
+-		for (auto&& [stage, data] : shaderData)
+-			Reflect(stage, data);
++		return converted;
+ 	}
+ 
+-	void OpenGLShader::CompileOrGetOpenGLBinaries()
++	void OpenGLShader::CreateProgram(const std::string& vertexSource, const std::string& fragmentSource)
+ 	{
+-		auto& shaderData = m_OpenGLSPIRV;
+-
+-		shaderc::Compiler compiler;
+-		shaderc::CompileOptions options;
+-		options.SetTargetEnvironment(shaderc_target_env_opengl, shaderc_env_version_opengl_4_5);
+-		const bool optimize = false;
+-		if (optimize)
+-			options.SetOptimizationLevel(shaderc_optimization_level_performance);
+-
+-		std::filesystem::path cacheDirectory = Utils::GetCacheDirectory();
+-
+-		shaderData.clear();
+-		m_OpenGLSourceCode.clear();
+-		for (auto&& [stage, spirv] : m_VulkanSPIRV)
++		auto compile = [](GLenum type, const std::string& source) -> GLuint
+ 		{
+-			std::filesystem::path shaderFilePath = m_FilePath;
+-			std::filesystem::path cachedPath = cacheDirectory / (shaderFilePath.filename().string() + Utils::GLShaderStageCachedOpenGLFileExtension(stage));
+-
+-			std::ifstream in(cachedPath, std::ios::in | std::ios::binary);
+-			if (in.is_open())
+-			{
+-				in.seekg(0, std::ios::end);
+-				auto size = in.tellg();
+-				in.seekg(0, std::ios::beg);
+-
+-				auto& data = shaderData[stage];
+-				data.resize(size / sizeof(uint32_t));
+-				in.read((char*)data.data(), size);
+-			}
+-			else
++			const GLchar* cSource = source.c_str();
++			GLuint shader = glCreateShader(type);
++			glShaderSource(shader, 1, &cSource, nullptr);
++			glCompileShader(shader);
++
++			GLint isCompiled = 0;
++			glGetShaderiv(shader, GL_COMPILE_STATUS, &isCompiled);
++			if (isCompiled == GL_FALSE)
+ 			{
+-				spirv_cross::CompilerGLSL glslCompiler(spirv);
+-				m_OpenGLSourceCode[stage] = glslCompiler.compile();
+-				auto& source = m_OpenGLSourceCode[stage];
+-
+-				shaderc::SpvCompilationResult module = compiler.CompileGlslToSpv(source, Utils::GLShaderStageToShaderC(stage), m_FilePath.c_str());
+-				if (module.GetCompilationStatus() != shaderc_compilation_status_success)
+-				{
+-					TC_Core_Error(module.GetErrorMessage());
+-					TC_Core_Assert(false);
+-				}
+-
+-				shaderData[stage] = std::vector<uint32_t>(module.cbegin(), module.cend());
+-
+-				std::ofstream out(cachedPath, std::ios::out | std::ios::binary);
+-				if (out.is_open())
+-				{
+-					auto& data = shaderData[stage];
+-					out.write((char*)data.data(), data.size() * sizeof(uint32_t));
+-					out.flush();
+-					out.close();
+-				}
++				GLint maxLength = 0;
++				glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &maxLength);
++				std::string log(static_cast<size_t>(maxLength), '\0');
++				glGetShaderInfoLog(shader, maxLength, &maxLength, &log[0]);
++				TC_Core_Error("Shader compilation failure:\n{0}", log);
++				glDeleteShader(shader);
++				return 0;
+ 			}
+-		}
+-	}
+ 
+-	void OpenGLShader::CreateProgram()
+-	{
+-		GLuint program = glCreateProgram();
++			return shader;
++		};
+ 
+-		std::vector<GLuint> shaderIDs;
+-		for (auto&& [stage, spirv] : m_OpenGLSPIRV)
++		GLuint vertexShader = compile(GL_VERTEX_SHADER, vertexSource);
++		GLuint fragmentShader = compile(GL_FRAGMENT_SHADER, fragmentSource);
++		if (!vertexShader || !fragmentShader)
+ 		{
+-			GLuint shaderID = shaderIDs.emplace_back(glCreateShader(stage));
+-			glShaderBinary(1, &shaderID, GL_SHADER_BINARY_FORMAT_SPIR_V, spirv.data(), spirv.size() * sizeof(uint32_t));
+-			glSpecializeShader(shaderID, "main", 0, nullptr, nullptr);
+-			glAttachShader(program, shaderID);
++			if (vertexShader) glDeleteShader(vertexShader);
++			if (fragmentShader) glDeleteShader(fragmentShader);
++			return;
+ 		}
+ 
+-		glLinkProgram(program);
++		m_RendererID = glCreateProgram();
++		glAttachShader(m_RendererID, vertexShader);
++		glAttachShader(m_RendererID, fragmentShader);
++		glLinkProgram(m_RendererID);
+ 
+-		GLint isLinked;
+-		glGetProgramiv(program, GL_LINK_STATUS, &isLinked);
++		GLint isLinked = 0;
++		glGetProgramiv(m_RendererID, GL_LINK_STATUS, &isLinked);
+ 		if (isLinked == GL_FALSE)
+ 		{
+-			GLint maxLength;
+-			glGetProgramiv(program, GL_INFO_LOG_LENGTH, &maxLength);
+-
+-			std::vector<GLchar> infoLog(maxLength);
+-			glGetProgramInfoLog(program, maxLength, &maxLength, infoLog.data());
+-			TC_Core_Error("Shader linking failed ({0}):\n{1}", m_FilePath, infoLog.data());
+-
+-			glDeleteProgram(program);
+-
+-			for (auto id : shaderIDs)
+-				glDeleteShader(id);
++			GLint maxLength = 0;
++			glGetProgramiv(m_RendererID, GL_INFO_LOG_LENGTH, &maxLength);
++			std::string log(static_cast<size_t>(maxLength), '\0');
++			glGetProgramInfoLog(m_RendererID, maxLength, &maxLength, &log[0]);
++			TC_Core_Error("Shader link failure:\n{0}", log);
++			glDeleteProgram(m_RendererID);
++			m_RendererID = 0;
+ 		}
+ 
+-		for (auto id : shaderIDs)
+-		{
+-			glDetachShader(program, id);
+-			glDeleteShader(id);
+-		}
++		glDeleteShader(vertexShader);
++		glDeleteShader(fragmentShader);
+ 
+-		m_RendererID = program;
+-	}
+-
+-	void OpenGLShader::Reflect(GLenum stage, const std::vector<uint32_t>& shaderData)
+-	{
+-		spirv_cross::Compiler compiler(shaderData);
+-		spirv_cross::ShaderResources resources = compiler.get_shader_resources();
+-
+-		TC_Core_Trace("OpenGLShader::Reflect - {0} {1}", Utils::GLShaderStageToString(stage), m_FilePath);
+-		TC_Core_Trace("    {0} uniform buffers", resources.uniform_buffers.size());
+-		TC_Core_Trace("    {0} resources", resources.sampled_images.size());
+-
+-		TC_Core_Trace("Uniform buffers:");
+-		for (const auto& resource : resources.uniform_buffers)
++		if (m_RendererID)
+ 		{
+-			const auto& bufferType = compiler.get_type(resource.base_type_id);
+-			uint32_t bufferSize = compiler.get_declared_struct_size(bufferType);
+-			uint32_t binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
+-			int memberCount = bufferType.member_types.size();
+-
+-			TC_Core_Trace("  {0}", resource.name);
+-			TC_Core_Trace("    Size = {0}", bufferSize);
+-			TC_Core_Trace("    Binding = {0}", binding);
+-			TC_Core_Trace("    Members = {0}", memberCount);
++			// The renderer binds its camera UBO to binding 0.
++			GLuint blockIndex = glGetUniformBlockIndex(m_RendererID, "Camera");
++			if (blockIndex != GL_INVALID_INDEX)
++				glUniformBlockBinding(m_RendererID, blockIndex, 0);
+ 		}
+ 	}
+ 
+ 	void OpenGLShader::Bind() const
+ 	{
+-		TC_PROFILE_FUNCTION();
+-
+-		glUseProgram(m_RendererID);
++		if (m_RendererID)
++			glUseProgram(m_RendererID);
+ 	}
+ 
+ 	void OpenGLShader::Unbind() const
+ 	{
+-		TC_PROFILE_FUNCTION();
+-
+ 		glUseProgram(0);
+ 	}
+ 
+-	void OpenGLShader::SetInt(const std::string& name, int value)
++	int OpenGLShader::GetUniformLocation(const std::string& name)
+ 	{
+-		TC_PROFILE_FUNCTION();
++		auto it = m_UniformLocationCache.find(name);
++		if (it != m_UniformLocationCache.end())
++			return it->second;
++
++		int location = m_RendererID ? glGetUniformLocation(m_RendererID, name.c_str()) : -1;
++		m_UniformLocationCache[name] = location;
++		return location;
++	}
+ 
+-		UploadUniformInt(name, value);
++	void OpenGLShader::SetInt(const std::string& name, int value)
++	{
++		int location = GetUniformLocation(name);
++		if (location >= 0) glUniform1i(location, value);
+ 	}
+ 
+ 	void OpenGLShader::SetIntArray(const std::string& name, int* values, uint32_t count)
+ 	{
+-		UploadUniformIntArray(name, values, count);
++		int location = GetUniformLocation(name);
++		if (location >= 0) glUniform1iv(location, (GLsizei)count, values);
+ 	}
+ 
+ 	void OpenGLShader::SetFloat(const std::string& name, float value)
+ 	{
+-		TC_PROFILE_FUNCTION();
+-
+-		UploadUniformFloat(name, value);
++		int location = GetUniformLocation(name);
++		if (location >= 0) glUniform1f(location, value);
+ 	}
+ 
+ 	void OpenGLShader::SetFloat2(const std::string& name, const glm::vec2& value)
+ 	{
+-		TC_PROFILE_FUNCTION();
+-
+-		UploadUniformFloat2(name, value);
++		int location = GetUniformLocation(name);
++		if (location >= 0) glUniform2f(location, value.x, value.y);
+ 	}
+ 
+ 	void OpenGLShader::SetFloat3(const std::string& name, const glm::vec3& value)
+ 	{
+-		TC_PROFILE_FUNCTION();
+-
+-		UploadUniformFloat3(name, value);
++		int location = GetUniformLocation(name);
++		if (location >= 0) glUniform3f(location, value.x, value.y, value.z);
+ 	}
+ 
+ 	void OpenGLShader::SetFloat4(const std::string& name, const glm::vec4& value)
+ 	{
+-		TC_PROFILE_FUNCTION();
+-
+-		UploadUniformFloat4(name, value);
++		int location = GetUniformLocation(name);
++		if (location >= 0) glUniform4f(location, value.x, value.y, value.z, value.w);
+ 	}
+ 
+ 	void OpenGLShader::SetMat4(const std::string& name, const glm::mat4& value)
+ 	{
+-		TC_PROFILE_FUNCTION();
+-
+-		UploadUniformMat4(name, value);
+-	}
+-
+-	void OpenGLShader::UploadUniformInt(const std::string& name, int value)
+-	{
+-		GLint location = glGetUniformLocation(m_RendererID, name.c_str());
+-		glUniform1i(location, value);
+-	}
+-
+-	void OpenGLShader::UploadUniformIntArray(const std::string& name, int* values, uint32_t count)
+-	{
+-		GLint location = glGetUniformLocation(m_RendererID, name.c_str());
+-		glUniform1iv(location, count, values);
+-	}
+-
+-	void OpenGLShader::UploadUniformFloat(const std::string& name, float value)
+-	{
+-		GLint location = glGetUniformLocation(m_RendererID, name.c_str());
+-		glUniform1f(location, value);
+-	}
+-
+-	void OpenGLShader::UploadUniformFloat2(const std::string& name, const glm::vec2& value)
+-	{
+-		GLint location = glGetUniformLocation(m_RendererID, name.c_str());
+-		glUniform2f(location, value.x, value.y);
+-	}
+-
+-	void OpenGLShader::UploadUniformFloat3(const std::string& name, const glm::vec3& value)
+-	{
+-		GLint location = glGetUniformLocation(m_RendererID, name.c_str());
+-		glUniform3f(location, value.x, value.y, value.z);
+-	}
+-
+-	void OpenGLShader::UploadUniformFloat4(const std::string& name, const glm::vec4& value)
+-	{
+-		GLint location = glGetUniformLocation(m_RendererID, name.c_str());
+-		glUniform4f(location, value.x, value.y, value.z, value.w);
+-	}
+-
+-	void OpenGLShader::UploadUniformMat3(const std::string& name, const glm::mat3& matrix)
+-	{
+-		GLint location = glGetUniformLocation(m_RendererID, name.c_str());
+-		glUniformMatrix3fv(location, 1, GL_FALSE, glm::value_ptr(matrix));
+-	}
+-
+-	void OpenGLShader::UploadUniformMat4(const std::string& name, const glm::mat4& matrix)
+-	{
+-		GLint location = glGetUniformLocation(m_RendererID, name.c_str());
+-		glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(matrix));
++		int location = GetUniformLocation(name);
++		if (location >= 0) glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(value));
+ 	}
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/TomCat/src/platform/OpenGL/OpenGLShader.h b/TomCat/src/platform/OpenGL/OpenGLShader.h
+index 893875e..a7dc91c 100644
+--- a/TomCat/src/platform/OpenGL/OpenGLShader.h
++++ b/TomCat/src/platform/OpenGL/OpenGLShader.h
+@@ -2,9 +2,8 @@
+ 
+ #include "TomCat/Renderer/Shader.h"
+ #include <glm/glm.hpp>
+-
+-// TODO: REMOVE!
+-typedef unsigned int GLenum;
++#include <string>
++#include <unordered_map>
+ 
+ namespace TomCat {
+ 
+@@ -28,33 +27,17 @@ namespace TomCat {
+ 
+ 		virtual const std::string& GetName() const override { return m_Name; }
+ 
+-		void UploadUniformInt(const std::string& name, int value);
+-		void UploadUniformIntArray(const std::string& name, int* values, uint32_t count);
+-
+-		void UploadUniformFloat(const std::string& name, float value);
+-		void UploadUniformFloat2(const std::string& name, const glm::vec2& value);
+-		void UploadUniformFloat3(const std::string& name, const glm::vec3& value);
+-		void UploadUniformFloat4(const std::string& name, const glm::vec4& value);
+-
+-		void UploadUniformMat3(const std::string& name, const glm::mat3& matrix);
+-		void UploadUniformMat4(const std::string& name, const glm::mat4& matrix);
+ 	private:
+ 		std::string ReadFile(const std::string& filepath);
+-		std::unordered_map<GLenum, std::string> PreProcess(const std::string& source);
++		void CreateProgram(const std::string& vertexSource, const std::string& fragmentSource);
++		std::string ToGLES3(const std::string& source, bool fragment) const;
++		int GetUniformLocation(const std::string& name);
+ 
+-		void CompileOrGetVulkanBinaries(const std::unordered_map<GLenum, std::string>& shaderSources);
+-		void CompileOrGetOpenGLBinaries();
+-		void CreateProgram();
+-		void Reflect(GLenum stage, const std::vector<uint32_t>& shaderData);
+ 	private:
+-		uint32_t m_RendererID;
++		uint32_t m_RendererID = 0;
+ 		std::string m_FilePath;
+ 		std::string m_Name;
+-
+-		std::unordered_map<GLenum, std::vector<uint32_t>> m_VulkanSPIRV;
+-		std::unordered_map<GLenum, std::vector<uint32_t>> m_OpenGLSPIRV;
+-
+-		std::unordered_map<GLenum, std::string> m_OpenGLSourceCode;
++		std::unordered_map<std::string, int> m_UniformLocationCache;
+ 	};
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/TomCat/src/platform/OpenGL/OpenGLTexture.cpp b/TomCat/src/platform/OpenGL/OpenGLTexture.cpp
+index 61ba4fb..d3abbba 100644
+--- a/TomCat/src/platform/OpenGL/OpenGLTexture.cpp
++++ b/TomCat/src/platform/OpenGL/OpenGLTexture.cpp
+@@ -13,6 +13,17 @@ namespace TomCat {
+ 		m_InternalFormat = GL_RGBA8;
+ 		m_DataFormat = GL_RGBA;
+ 
++#ifdef __EMSCRIPTEN__
++		glGenTextures(1, &m_RendererID);
++		glBindTexture(GL_TEXTURE_2D, m_RendererID);
++		glTexStorage2D(GL_TEXTURE_2D, 1, m_InternalFormat, m_Width, m_Height);
++
++		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
++		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
++
++		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
++		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
++#else
+ 		glCreateTextures(GL_TEXTURE_2D, 1, &m_RendererID);
+ 		glTextureStorage2D(m_RendererID, 1, m_InternalFormat, m_Width, m_Height);
+ 
+@@ -21,6 +32,7 @@ namespace TomCat {
+ 
+ 		glTextureParameteri(m_RendererID, GL_TEXTURE_WRAP_S, GL_REPEAT);
+ 		glTextureParameteri(m_RendererID, GL_TEXTURE_WRAP_T, GL_REPEAT);
++#endif
+ 	}
+ 
+ 	OpenGLTexture2D::OpenGLTexture2D(const std::string& path)
+@@ -60,6 +72,19 @@ namespace TomCat {
+ 
+ 			TC_Core_Assert(internalFormat & dataFormat, "Format not supported!");
+ 
++#ifdef __EMSCRIPTEN__
++			glGenTextures(1, &m_RendererID);
++			glBindTexture(GL_TEXTURE_2D, m_RendererID);
++			glTexStorage2D(GL_TEXTURE_2D, 1, internalFormat, m_Width, m_Height);
++
++			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
++			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
++
++			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
++			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
++
++			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_Width, m_Height, dataFormat, GL_UNSIGNED_BYTE, data);
++#else
+ 			glCreateTextures(GL_TEXTURE_2D, 1, &m_RendererID);
+ 			glTextureStorage2D(m_RendererID, 1, internalFormat, m_Width, m_Height);
+ 
+@@ -70,6 +95,7 @@ namespace TomCat {
+ 			glTextureParameteri(m_RendererID, GL_TEXTURE_WRAP_T, GL_REPEAT);
+ 
+ 			glTextureSubImage2D(m_RendererID, 0, 0, 0, m_Width, m_Height, dataFormat, GL_UNSIGNED_BYTE, data);
++#endif
+ 
+ 			stbi_image_free(data);
+ 		}
+@@ -88,13 +114,23 @@ namespace TomCat {
+ 
+ 		uint32_t bpp = m_DataFormat == GL_RGBA ? 4 : 3;
+ 		TC_Core_Assert(size == m_Width * m_Height * bpp, "Data must be entire texture!");
++#ifdef __EMSCRIPTEN__
++		glBindTexture(GL_TEXTURE_2D, m_RendererID);
++		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_Width, m_Height, m_DataFormat, GL_UNSIGNED_BYTE, data);
++#else
+ 		glTextureSubImage2D(m_RendererID, 0, 0, 0, m_Width, m_Height, m_DataFormat, GL_UNSIGNED_BYTE, data);
++#endif
+ 	}
+ 
+ 	void OpenGLTexture2D::Bind(uint32_t slot) const
+ 	{
+ 		TC_PROFILE_FUNCTION();
+ 
++#ifdef __EMSCRIPTEN__
++		glActiveTexture(GL_TEXTURE0 + slot);
++		glBindTexture(GL_TEXTURE_2D, m_RendererID);
++#else
+ 		glBindTextureUnit(slot, m_RendererID);
++#endif
+ 	}
+-}
+\ No newline at end of file
++}
+diff --git a/TomCat/src/platform/OpenGL/OpenGLTexture.h b/TomCat/src/platform/OpenGL/OpenGLTexture.h
+index 1e1f7a8..5bd2dbf 100644
+--- a/TomCat/src/platform/OpenGL/OpenGLTexture.h
++++ b/TomCat/src/platform/OpenGL/OpenGLTexture.h
+@@ -1,7 +1,11 @@
+ #pragma once
+ 
+ #include "TomCat/Renderer/Texture.h"
++#ifdef __EMSCRIPTEN__
++#include <GLES3/gl3.h>
++#else
+ #include <glad/glad.h>
++#endif
+ 
+ namespace TomCat {
+ 
+diff --git a/TomCat/src/platform/OpenGL/OpenGLUniformBuffer.cpp b/TomCat/src/platform/OpenGL/OpenGLUniformBuffer.cpp
+index a52d830..3e84fc5 100644
+--- a/TomCat/src/platform/OpenGL/OpenGLUniformBuffer.cpp
++++ b/TomCat/src/platform/OpenGL/OpenGLUniformBuffer.cpp
+@@ -1,14 +1,24 @@
+ #include "tcpch.h"
+ #include "OpenGLUniformBuffer.h"
+ 
++#ifdef __EMSCRIPTEN__
++#include <GLES3/gl3.h>
++#else
+ #include <glad/glad.h>
++#endif
+ 
+ namespace TomCat {
+ 
+ 	OpenGLUniformBuffer::OpenGLUniformBuffer(uint32_t size, uint32_t binding)
+ 	{
++#ifdef __EMSCRIPTEN__
++		glGenBuffers(1, &m_RendererID);
++		glBindBuffer(GL_UNIFORM_BUFFER, m_RendererID);
++		glBufferData(GL_UNIFORM_BUFFER, size, nullptr, GL_DYNAMIC_DRAW);
++#else
+ 		glCreateBuffers(1, &m_RendererID);
+ 		glNamedBufferData(m_RendererID, size, nullptr, GL_DYNAMIC_DRAW); // TODO: investigate usage hint
++#endif
+ 		glBindBufferBase(GL_UNIFORM_BUFFER, binding, m_RendererID);
+ 	}
+ 
+@@ -20,7 +30,13 @@ namespace TomCat {
+ 
+ 	void OpenGLUniformBuffer::SetData(const void* data, uint32_t size, uint32_t offset)
+ 	{
++#ifdef __EMSCRIPTEN__
++		glBindBuffer(GL_UNIFORM_BUFFER, m_RendererID);
++		glBufferSubData(GL_UNIFORM_BUFFER, offset, size, data);
++		glBindBuffer(GL_UNIFORM_BUFFER, 0);
++#else
+ 		glNamedBufferSubData(m_RendererID, offset, size, data);
++#endif
+ 	}
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/TomCat/src/platform/OpenGL/OpenGLVertexArray.cpp b/TomCat/src/platform/OpenGL/OpenGLVertexArray.cpp
+index fdb261e..85e11ed 100644
+--- a/TomCat/src/platform/OpenGL/OpenGLVertexArray.cpp
++++ b/TomCat/src/platform/OpenGL/OpenGLVertexArray.cpp
+@@ -1,7 +1,11 @@
+ #include "tcpch.h"
+ #include "Platform/OpenGL/OpenGLVertexArray.h"
+ 
++#ifdef __EMSCRIPTEN__
++#include <GLES3/gl3.h>
++#else
+ #include <glad/glad.h>
++#endif
+ 
+ namespace TomCat {
+ 
+@@ -30,7 +34,11 @@ namespace TomCat {
+ 	{
+ 		TC_PROFILE_FUNCTION();
+ 
++#ifdef __EMSCRIPTEN__
++		glGenVertexArrays(1, &m_RendererID);
++#else
+ 		glCreateVertexArrays(1, &m_RendererID);
++#endif
+ 	}
+ 
+ 	OpenGLVertexArray::~OpenGLVertexArray()
+@@ -134,4 +142,4 @@ namespace TomCat {
+ 		m_IndexBuffer = indexBuffer;
+ 	}
+ 
+-}
+\ No newline at end of file
++}

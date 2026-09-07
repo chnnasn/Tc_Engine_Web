@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TomCat Engine — Web 运行时</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #111; }
+    #canvas { width: 100vw; height: 100vh; display: block; }
+    #log { position: fixed; left: 8px; bottom: 8px; color: #9f9; font: 12px monospace; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="log">加载模块…</div>
+  <script src="./tomcat_web_module.js"></script>
+  <script>
+    const logEl = document.getElementById('log');
+    const setLog = (text) => { logEl.textContent = text; };
+
+    if (typeof TomCatWebModule !== 'function') {
+      setLog('TomCatWebModule 工厂不存在');
+      throw new Error('missing TomCatWebModule factory');
+    }
+
+    TomCatWebModule({
+      canvas: document.getElementById('canvas'),
+      locateFile: (name) => './' + name
+    }).then((module) => {
+      const result = module._tc_web_runtime_boot(1280, 720);
+      if (result !== 0) {
+        setLog('tc_web_runtime_boot 失败: ' + result);
+        return;
+      }
+      setLog('引擎已启动，场景渲染中…');
+
+      let last = performance.now();
+      const tick = (now) => {
+        const seconds = Math.min((now - last) / 1000.0, 0.05);
+        last = now;
+        module._tc_web_runtime_frame(seconds);
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }).catch((error) => {
+      setLog('模块错误: ' + error.message);
+      console.error(error);
+    });
+  </script>
+</body>
+</html>
