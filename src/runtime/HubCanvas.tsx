@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { installEditorInputLock } from './editor-input-lock'
 
 declare global {
   interface Window {
@@ -35,6 +36,7 @@ export default function HubCanvas() {
     let disposed = false
     let runtime: { ready: Promise<unknown>; shutdown?: () => void } | undefined
     const preventBrowserShortcut = (event: KeyboardEvent) => {
+      if (document.activeElement !== canvasRef.current) return
       if (event.isComposing) return
       const key = event.key.toLowerCase()
       const modified = event.ctrlKey || event.metaKey
@@ -60,9 +62,10 @@ export default function HubCanvas() {
         if (!disposed) setError(reason instanceof Error ? reason.message : String(reason))
       }
     }
+    const removeInputLock = installEditorInputLock(canvasRef)
     window.addEventListener('keydown', preventBrowserShortcut, true)
     start()
-    return () => { disposed = true; window.removeEventListener('keydown', preventBrowserShortcut, true); try { runtime?.shutdown?.() } catch { /* best effort */ } window.TomCatHubRuntime = undefined }
+    return () => { disposed = true; removeInputLock(); window.removeEventListener('keydown', preventBrowserShortcut, true); try { runtime?.shutdown?.() } catch { /* best effort */ } window.TomCatHubRuntime = undefined }
   }, [])
 
   return <main className="runtime-page">

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { installEditorInputLock } from './editor-input-lock';
 
 declare global {
   interface Window { TomCatEngineHost?: any; TomCatWebModule?: any; TomCatRuntime?: any; TomCatRuntimeReady?: Promise<unknown>; TomCatStore?: any; Module?: any; }
@@ -27,6 +28,7 @@ export default function RuntimeCanvas({ project, onReady, onError }: RuntimeCanv
   useEffect(() => {
     let disposed = false; let runtime: any;
     const preventBrowserShortcut = (event: KeyboardEvent) => {
+      if (document.activeElement !== canvasRef.current) return;
       if (event.isComposing) return;
       const key = event.key.toLowerCase();
       const modified = event.ctrlKey || event.metaKey;
@@ -50,9 +52,10 @@ export default function RuntimeCanvas({ project, onReady, onError }: RuntimeCanv
       } catch (e) { const cause = e instanceof Error ? e : new Error(String(e)); if (!disposed) { setError(cause.message); onError?.(cause); } }
     };
     const log = (event: Event) => setStatus(String((event as CustomEvent).detail || ''));
+    const removeInputLock = installEditorInputLock(canvasRef);
     window.addEventListener('keydown', preventBrowserShortcut, true);
     window.addEventListener('tomcat:engine:log', log); window.addEventListener('tomcat:engine:error', log); start();
-    return () => { disposed = true; window.removeEventListener('keydown', preventBrowserShortcut, true); window.removeEventListener('tomcat:engine:log', log); window.removeEventListener('tomcat:engine:error', log); try { runtime?.shutdown?.(); } catch { /* module may not expose shutdown */ } };
+    return () => { disposed = true; removeInputLock(); window.removeEventListener('keydown', preventBrowserShortcut, true); window.removeEventListener('tomcat:engine:log', log); window.removeEventListener('tomcat:engine:error', log); try { runtime?.shutdown?.(); } catch { /* module may not expose shutdown */ } };
   }, [project, onError, onReady]);
   return <div className="runtime-host" style={{ width: '100%', height: '100%', margin: 0, overflow: 'hidden', background: '#202020', color: '#d9d9d9' }}><canvas ref={canvasRef} id="canvas" tabIndex={0} aria-label="TomCat Engine WebGL2 editor" onPointerDown={(event) => { canvasRef.current?.focus(); canvasRef.current?.setPointerCapture(event.pointerId); }} onPointerUp={(event) => { if (canvasRef.current?.hasPointerCapture(event.pointerId)) canvasRef.current.releasePointerCapture(event.pointerId); }} onPointerCancel={(event) => { if (canvasRef.current?.hasPointerCapture(event.pointerId)) canvasRef.current.releasePointerCapture(event.pointerId); }} onMouseDown={(event) => { canvasRef.current?.focus(); if (event.button === 2) event.preventDefault(); }} onContextMenu={(event) => event.preventDefault()} onDragStart={(event) => event.preventDefault()} style={{ width: '100%', height: '100%', display: 'block', outline: 0 }} />{error ? <div className="runtime-loading runtime-error"><strong>启动失败</strong><span>{error}</span></div> : !ready && <div className="runtime-loading"><strong>TomCat Engine</strong><span>{status}</span></div>}</div>;
 }
