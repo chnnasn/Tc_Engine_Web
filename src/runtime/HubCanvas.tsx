@@ -34,6 +34,14 @@ export default function HubCanvas() {
   useEffect(() => {
     let disposed = false
     let runtime: { ready: Promise<unknown>; shutdown?: () => void } | undefined
+    const preventBrowserShortcut = (event: KeyboardEvent) => {
+      if (event.isComposing) return
+      const key = event.key.toLowerCase()
+      const modified = event.ctrlKey || event.metaKey
+      const browserShortcut = modified && ['n', 'o', 'p', 'r', 's', 'd', 'z', 'y'].includes(key)
+      const browserNavigation = event.altKey && ['arrowleft', 'arrowright', 'home'].includes(key)
+      if (browserShortcut || browserNavigation || event.key === 'F5' || event.key === 'Backspace' || event.key === 'Tab') event.preventDefault()
+    }
     const start = async () => {
       try {
         await loadModule()
@@ -52,12 +60,13 @@ export default function HubCanvas() {
         if (!disposed) setError(reason instanceof Error ? reason.message : String(reason))
       }
     }
+    window.addEventListener('keydown', preventBrowserShortcut, true)
     start()
-    return () => { disposed = true; try { runtime?.shutdown?.() } catch { /* best effort */ } window.TomCatHubRuntime = undefined }
+    return () => { disposed = true; window.removeEventListener('keydown', preventBrowserShortcut, true); try { runtime?.shutdown?.() } catch { /* best effort */ } window.TomCatHubRuntime = undefined }
   }, [])
 
   return <main className="runtime-page">
-    <canvas ref={canvasRef} tabIndex={0} aria-label="TomCat Hub Dear ImGui WebGL2" />
+    <canvas ref={canvasRef} tabIndex={0} aria-label="TomCat Hub Dear ImGui WebGL2" onPointerDown={(event) => { canvasRef.current?.focus(); canvasRef.current?.setPointerCapture(event.pointerId); }} onPointerUp={(event) => { if (canvasRef.current?.hasPointerCapture(event.pointerId)) canvasRef.current.releasePointerCapture(event.pointerId); }} onPointerCancel={(event) => { if (canvasRef.current?.hasPointerCapture(event.pointerId)) canvasRef.current.releasePointerCapture(event.pointerId); }} onMouseDown={() => canvasRef.current?.focus()} onContextMenu={(event) => event.preventDefault()} onDragStart={(event) => event.preventDefault()} />
     {error ? <div className="runtime-loading runtime-error"><strong>TomCat Hub 启动失败</strong><span>{error}</span></div> : !ready && <div className="runtime-loading"><strong>TomCat Hub</strong><span>{status}</span></div>}
   </main>
 }
