@@ -40,7 +40,7 @@ var ENVIRONMENT_IS_SHELL = !ENVIRONMENT_IS_WEB && !ENVIRONMENT_IS_NODE && !ENVIR
 
 // --pre-jses are emitted after the Module integration code, so that they can
 // refer to Module (if they choose; they can also define Module)
-// include: C:\Users\x\AppData\Local\Temp\tmp3nwvsvdt.js
+// include: C:\Users\x\AppData\Local\Temp\tmpuif6k3dd.js
 
   Module['expectedDataFileDownloads'] ??= 0;
   Module['expectedDataFileDownloads']++;
@@ -180,21 +180,21 @@ Module['FS_createPath']("/Packages/fonts", "opensans", true, true);
 
   })();
 
-// end include: C:\Users\x\AppData\Local\Temp\tmp3nwvsvdt.js
-// include: C:\Users\x\AppData\Local\Temp\tmpxdm6uy79.js
+// end include: C:\Users\x\AppData\Local\Temp\tmpuif6k3dd.js
+// include: C:\Users\x\AppData\Local\Temp\tmps87a66fo.js
 
     // All the pre-js content up to here must remain later on, we need to run
     // it.
     if ((typeof ENVIRONMENT_IS_WASM_WORKER != 'undefined' && ENVIRONMENT_IS_WASM_WORKER) || (typeof ENVIRONMENT_IS_PTHREAD != 'undefined' && ENVIRONMENT_IS_PTHREAD) || (typeof ENVIRONMENT_IS_AUDIO_WORKLET != 'undefined' && ENVIRONMENT_IS_AUDIO_WORKLET)) Module['preRun'] = [];
     var necessaryPreJSTasks = Module['preRun'].slice();
-  // end include: C:\Users\x\AppData\Local\Temp\tmpxdm6uy79.js
-// include: C:\Users\x\AppData\Local\Temp\tmpxol_gm5e.js
+  // end include: C:\Users\x\AppData\Local\Temp\tmps87a66fo.js
+// include: C:\Users\x\AppData\Local\Temp\tmpgksn9qco.js
 
     if (!Module['preRun']) throw 'Module.preRun should exist because file support used it; did a pre-js delete it?';
     necessaryPreJSTasks.forEach((task) => {
       if (Module['preRun'].indexOf(task) < 0) throw 'All preRun tasks that exist before user pre-js code should remain after; did you replace Module or modify Module.preRun?';
     });
-  // end include: C:\Users\x\AppData\Local\Temp\tmpxol_gm5e.js
+  // end include: C:\Users\x\AppData\Local\Temp\tmpgksn9qco.js
 
 
 var arguments_ = [];
@@ -4722,58 +4722,6 @@ async function createWasm() {
   }
 
   
-  var __mktime_js = function(tmPtr) {
-  
-  var ret = (() => { 
-      var date = new Date(HEAP32[(((tmPtr)+(20))>>2)] + 1900,
-                          HEAP32[(((tmPtr)+(16))>>2)],
-                          HEAP32[(((tmPtr)+(12))>>2)],
-                          HEAP32[(((tmPtr)+(8))>>2)],
-                          HEAP32[(((tmPtr)+(4))>>2)],
-                          HEAP32[((tmPtr)>>2)],
-                          0);
-  
-      // There's an ambiguous hour when the time goes back; the tm_isdst field is
-      // used to disambiguate it.  Date() basically guesses, so we fix it up if it
-      // guessed wrong, or fill in tm_isdst with the guess if it's -1.
-      var dst = HEAP32[(((tmPtr)+(32))>>2)];
-      var guessedOffset = date.getTimezoneOffset();
-      var start = new Date(date.getFullYear(), 0, 1);
-      var summerOffset = new Date(date.getFullYear(), 6, 1).getTimezoneOffset();
-      var winterOffset = start.getTimezoneOffset();
-      var dstOffset = Math.min(winterOffset, summerOffset); // DST is in December in South
-      if (dst < 0) {
-        // Attention: some regions don't have DST at all.
-        HEAP32[(((tmPtr)+(32))>>2)] = Number(summerOffset != winterOffset && dstOffset == guessedOffset);
-      } else if ((dst > 0) != (dstOffset == guessedOffset)) {
-        var nonDstOffset = Math.max(winterOffset, summerOffset);
-        var trueOffset = dst > 0 ? dstOffset : nonDstOffset;
-        // Don't try setMinutes(date.getMinutes() + ...) -- it's messed up.
-        date.setTime(date.getTime() + (trueOffset - guessedOffset)*60000);
-      }
-  
-      HEAP32[(((tmPtr)+(24))>>2)] = date.getDay();
-      var yday = ydayFromDate(date)|0;
-      HEAP32[(((tmPtr)+(28))>>2)] = yday;
-      // To match expected behavior, update fields from date
-      HEAP32[((tmPtr)>>2)] = date.getSeconds();
-      HEAP32[(((tmPtr)+(4))>>2)] = date.getMinutes();
-      HEAP32[(((tmPtr)+(8))>>2)] = date.getHours();
-      HEAP32[(((tmPtr)+(12))>>2)] = date.getDate();
-      HEAP32[(((tmPtr)+(16))>>2)] = date.getMonth();
-      HEAP32[(((tmPtr)+(20))>>2)] = date.getYear();
-  
-      var timeMs = date.getTime();
-      if (isNaN(timeMs)) {
-        return -1;
-      }
-      // Return time in microseconds
-      return timeMs / 1000;
-     })();
-  return BigInt(ret);
-  };
-
-  
   var __tzset_js = (timezone, daylight, std_name, dst_name) => {
       // TODO: Use (malleable) environment variables instead of system settings.
       var currentYear = new Date().getFullYear();
@@ -4857,7 +4805,6 @@ async function createWasm() {
       return 0;
     ;
   }
-
 
 
   var getHeapMax = () =>
@@ -9689,13 +9636,9 @@ var wasmImports = {
   /** @export */
   _localtime_js: __localtime_js,
   /** @export */
-  _mktime_js: __mktime_js,
-  /** @export */
   _tzset_js: __tzset_js,
   /** @export */
   clock_time_get: _clock_time_get,
-  /** @export */
-  emscripten_date_now: _emscripten_date_now,
   /** @export */
   emscripten_get_now: _emscripten_get_now,
   /** @export */
@@ -9971,8 +9914,6 @@ var wasmImports = {
   /** @export */
   invoke_diii,
   /** @export */
-  invoke_djj,
-  /** @export */
   invoke_f,
   /** @export */
   invoke_fi,
@@ -10010,8 +9951,6 @@ var wasmImports = {
   invoke_iiiiiii,
   /** @export */
   invoke_iiiiiiii,
-  /** @export */
-  invoke_iiiiiiiii,
   /** @export */
   invoke_iiiiiiiiiii,
   /** @export */
@@ -10077,8 +10016,6 @@ var wasmImports = {
   /** @export */
   invoke_viii,
   /** @export */
-  invoke_viiif,
-  /** @export */
   invoke_viiiff,
   /** @export */
   invoke_viiifffffffff,
@@ -10087,11 +10024,7 @@ var wasmImports = {
   /** @export */
   invoke_viiiif,
   /** @export */
-  invoke_viiiiff,
-  /** @export */
   invoke_viiiifi,
-  /** @export */
-  invoke_viiiifif,
   /** @export */
   invoke_viiiii,
   /** @export */
@@ -10222,6 +10155,17 @@ function invoke_vi(index,a1) {
   var sp = stackSave();
   try {
     getWasmTableEntry(index)(a1);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiii(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -10439,17 +10383,6 @@ function invoke_idiiii(index,a1,a2,a3,a4,a5) {
   }
 }
 
-function invoke_viiiii(index,a1,a2,a3,a4,a5) {
-  var sp = stackSave();
-  try {
-    getWasmTableEntry(index)(a1,a2,a3,a4,a5);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
 function invoke_ji(index,a1) {
   var sp = stackSave();
   try {
@@ -10507,28 +10440,6 @@ function invoke_iiiiiiii(index,a1,a2,a3,a4,a5,a6,a7) {
   }
 }
 
-function invoke_djj(index,a1,a2) {
-  var sp = stackSave();
-  try {
-    return getWasmTableEntry(index)(a1,a2);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_iiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8) {
-  var sp = stackSave();
-  try {
-    return getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
 function invoke_viiiiii(index,a1,a2,a3,a4,a5,a6) {
   var sp = stackSave();
   try {
@@ -10555,50 +10466,6 @@ function invoke_iif(index,a1,a2) {
   var sp = stackSave();
   try {
     return getWasmTableEntry(index)(a1,a2);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiffffiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10) {
-  var sp = stackSave();
-  try {
-    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiiff(index,a1,a2,a3,a4,a5) {
-  var sp = stackSave();
-  try {
-    getWasmTableEntry(index)(a1,a2,a3,a4,a5);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiifffffffff(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12) {
-  var sp = stackSave();
-  try {
-    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_f(index) {
-  var sp = stackSave();
-  try {
-    return getWasmTableEntry(index)();
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -10654,6 +10521,50 @@ function invoke_iiiiiiffffi(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10) {
   var sp = stackSave();
   try {
     return getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiffffiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiff(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiifffffffff(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_f(index) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)();
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -10786,39 +10697,6 @@ function invoke_iiifffii(index,a1,a2,a3,a4,a5,a6,a7) {
   var sp = stackSave();
   try {
     return getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiiifif(index,a1,a2,a3,a4,a5,a6,a7) {
-  var sp = stackSave();
-  try {
-    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiiiff(index,a1,a2,a3,a4,a5,a6) {
-  var sp = stackSave();
-  try {
-    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiif(index,a1,a2,a3,a4) {
-  var sp = stackSave();
-  try {
-    getWasmTableEntry(index)(a1,a2,a3,a4);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
