@@ -509,7 +509,7 @@
           this.store.create({ name: folder, template: meta.template || "2D", description: meta.description || "" });
         } catch (_) { /* store entry already exists or name reserved */ }
       }
-      const target = `../runtime/?project=${encodeURIComponent(folder)}`;
+      const target = `/editor/?project=${encodeURIComponent(folder)}`;
       global.location.assign(target);
     }
 

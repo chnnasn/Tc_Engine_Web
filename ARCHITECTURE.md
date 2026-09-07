@@ -1,11 +1,11 @@
 # Web 迁移边界与运行协议
 
-TomCat 的桌面实现继续由上游 `TomCat/`、GLFW 和 OpenGL 驱动；Web 目标不改这些核心文件。页面由 `src/` 中的 React + TypeScript 组件渲染，WASM 适配器是唯一与 Emscripten 和虚拟文件系统交互的地方。
+TomCat 的桌面实现继续由上游 `TomCat/`、GLFW 和 OpenGL 驱动；Web 目标不改这些核心文件。`src/` 中的 React + TypeScript 代码只提供 Hub/Editor 画布宿主，WASM 适配器是唯一与 Emscripten 和虚拟文件系统交互的地方。
 
 ## 生命周期
 
 ```text
-React Hub/Editor -> WebBridge.dispatch(command)
+上游 ImGui Hub/Editor -> WebBridge.dispatch(command)
                  -> Registry adapter (scene/assets/input/storage)
                  -> C++ bridge / existing engine facade
                  -> Bridge.emit(event)
@@ -27,7 +27,7 @@ React Hub/Editor -> WebBridge.dispatch(command)
 
 ## 存储
 
-浏览器实现默认把项目清单和编辑器状态写入 `localStorage`；资源文件由可替换的 IndexedDB/IDBFS adapter 承载。导入导出使用标准 File System Access API（不可用时回退到下载/上传）。所有 adapter 都是可替换的，便于后续接入云端 API。
+浏览器实现默认通过 WASM 的 IDBFS adapter 持久化项目与资源；WebBridge 负责把 Hub/Editor 的操作映射到上游引擎。
 
 ## 验证
 

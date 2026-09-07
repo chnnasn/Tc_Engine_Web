@@ -58,6 +58,6 @@ export default function HubCanvas() {
 
   return <main className="runtime-page">
     <canvas ref={canvasRef} tabIndex={0} aria-label="TomCat Hub Dear ImGui WebGL2" />
-    {error ? <div className="runtime-loading runtime-error"><strong>TomCat Hub 启动失败</strong><span>{error}</span><a href="/manage/">打开管理台</a></div> : !ready && <div className="runtime-loading"><strong>TomCat Hub</strong><span>{status}</span></div>}
+    {error ? <div className="runtime-loading runtime-error"><strong>TomCat Hub 启动失败</strong><span>{error}</span></div> : !ready && <div className="runtime-loading"><strong>TomCat Hub</strong><span>{status}</span></div>}
   </main>
 }

@@ -16,11 +16,6 @@ const loadScript = (src: string) => {
   return pending;
 };
 
-async function loadFirst(paths: string[]) {
-  for (const path of paths) { try { await loadScript(path); return; } catch { /* try next packaged layout */ } }
-  throw new Error(`找不到 WASM 运行时资源：${paths[0]}`);
-}
-
 export type RuntimeCanvasProps = { project?: any; onReady?: (runtime: any) => void; onError?: (error: Error) => void };
 
 /** React host for the upstream Emscripten editor. The C++/WASM module remains untouched. */
@@ -37,7 +32,7 @@ export default function RuntimeCanvas({ project, onReady, onError }: RuntimeCanv
     const start = async () => {
       try {
         if (!window.TomCatEngineHost) throw new Error('React 运行时适配器未初始化');
-        if (typeof window.TomCatWebModule !== 'function') await loadFirst(['/runtime/tomcat_web_module.js', '/wasm/public/runtime/tomcat_web_module.js', '/wasm/public/editor/tomcat_web_module.js']);
+        if (typeof window.TomCatWebModule !== 'function') await loadScript('/runtime/tomcat_web_module.js?v=20260907-cjk');
         if (disposed) return;
         if (!window.TomCatEngineHost || typeof window.TomCatEngineHost.EngineRuntime !== 'function') throw new Error('EngineRuntime 未找到');
         if (!canvasRef.current) throw new Error('Canvas 未挂载');
