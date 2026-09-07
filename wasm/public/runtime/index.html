@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <link rel="icon" type="image/svg+xml" href="../shared/favicon.svg">
   <meta name="theme-color" content="#111111">
   <title>TomCat Engine · Web Editor</title>
+  <link rel="icon" type="image/svg+xml" href="../shared/favicon.svg">
   <style>
     :root { color-scheme: dark; }
     html, body, #engineHost { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #202020; }
@@ -56,12 +56,12 @@
         return;
       }
 
-      const projectId = params.get("project");
-      const project = (window.TomCatStore && (window.TomCatStore.get(projectId) || window.TomCatStore.list()[0])) || null;
-      if (project) {
-        document.title = `${project.name} · TomCat Engine`;
-        document.getElementById("backToHub").href = `../hub/?project=${encodeURIComponent(project.id)}`;
-      }
+      const raw = params.get("project") || localStorage.getItem("tomcat.lastProjectId");
+      const store = window.TomCatStore;
+      const known = store && (store.get(raw) || store.list().find((p) => p.name === raw));
+      const project = known || (raw ? { id: raw, name: raw } : (store?.list()[0] || { id: "MainScene", name: "MainScene" }));
+      document.title = `${project.name} · TomCat Engine`;
+      document.getElementById("backToHub").href = `../hub/?project=${encodeURIComponent(project.id || project.name)}`;
 
       const runtime = new window.TomCatEngineHost.EngineRuntime({ canvas, project });
       window.TomCatRuntime = runtime;
@@ -71,7 +71,7 @@
 
       runtime.ready.then(() => {
         loading.classList.add("done");
-        setStatus(`上游 EditorLayer · WebGL2 · ${project ? project.name : "Untitled Project"}`, false);
+        setStatus(`上游 EditorLayer · WebGL2 · ${project.name}`, false);
         window.setTimeout(() => setStatus("", true), 2600);
         canvas.focus();
       }).catch(fail);

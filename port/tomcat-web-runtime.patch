@@ -1,3 +1,517 @@
+diff --git a/Builder/Manager/src/ExampleLayer.cpp b/Builder/Manager/src/ExampleLayer.cpp
+index 32c157d..7bbc303 100644
+--- a/Builder/Manager/src/ExampleLayer.cpp
++++ b/Builder/Manager/src/ExampleLayer.cpp
+@@ -9,7 +9,9 @@
+ 
+ #include "TomCat/Math/Math.h"
+ #include <fstream>
++#ifndef __EMSCRIPTEN__
+ #include <shellapi.h>
++#endif
+ #include <cstdio>
+ #include <cctype>
+ #include <algorithm>
+@@ -81,10 +83,20 @@ namespace TomCat {
+ 		TC_PROFILE_FUNCTION();
+ 	}
+ 
+-	void ExampleLayer::OnUpdate(Timestep ts)
++			void ExampleLayer::OnUpdate(Timestep ts)
+ 	{
+ 		TC_PROFILE_FUNCTION();
++		(void)ts;
+ 
++#ifdef __EMSCRIPTEN__
++		if (m_WebRescanRequested)
++		{
++			m_WebRescanRequested = false;
++			ProjectManager::Get().ScanProjects();
++			m_Projects = ProjectManager::Get().GetProjects();
++			m_VisibleProjects.clear();
++		}
++#endif
+ 	}
+ 
+ 			void ExampleLayer::OnImGuiRender()
+@@ -831,6 +843,7 @@ void ExampleLayer::RenderSettingsDialog()
+ 
+ 	void ExampleLayer::OpenInExplorer(Ref<Project> project)
+ 	{
++#ifndef __EMSCRIPTEN__
+ 		if (!project)
+ 			return;
+ 		std::filesystem::path dir = project->GetProjectPath().parent_path();
+@@ -838,7 +851,19 @@ void ExampleLayer::RenderSettingsDialog()
+ 		{
+ 			ShellExecuteA(NULL, "open", dir.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
+ 		}
++#else
++		// A browser has no file explorer to reveal; opening the project is
++		// handled by the Web host through ProjectManager::OpenProjectInEditor.
++		(void)project;
++#endif
++	}
++
++#ifdef __EMSCRIPTEN__
++	void ExampleLayer::WebRequestRescan()
++	{
++		m_WebRescanRequested = true;
+ 	}
++#endif
+ 
+ 	std::string ExampleLayer::LocalizedRelativeTime(Ref<Project> project) const
+ 	{
+diff --git a/Builder/Manager/src/ExampleLayer.h b/Builder/Manager/src/ExampleLayer.h
+index ce7c263..9f51da4 100644
+--- a/Builder/Manager/src/ExampleLayer.h
++++ b/Builder/Manager/src/ExampleLayer.h
+@@ -32,6 +32,13 @@ namespace TomCat {
+ 		void OnUpdate(Timestep ts) override;
+ 		virtual void OnImGuiRender() override;
+ 		void OnEvent(Event& e) override;
++#ifdef __EMSCRIPTEN__
++		// Called by the browser host after it imports or removes a project
++		// behind the Hub's back (for example an uploaded .tcproj).  The
++		// refresh runs on the next frame so the list update stays on the
++		// render thread.
++		void WebRequestRescan();
++#endif
+ 	private:
+ 		void AddProject();
+ 		void NewProject();
+@@ -65,9 +72,12 @@ namespace TomCat {
+ 
+ 		bool m_ShowNewProjectDialog = false;
+ 		bool m_ShowSettingsDialog = false;
++#ifdef __EMSCRIPTEN__
++		bool m_WebRescanRequested = false;
++#endif
+ 		char m_NewProjectName[256] = "";
+ 		char m_NewProjectAuthor[256] = "";
+ 		char m_NewProjectDescription[512] = "";
+ 		std::filesystem::path m_NewProjectPath;
+ 	};
+-}
+\ No newline at end of file
++}
+diff --git a/Editor/TomCatInut/src/EditorLayer.cpp b/Editor/TomCatInut/src/EditorLayer.cpp
+index 06cc6de..798158b 100644
+--- a/Editor/TomCatInut/src/EditorLayer.cpp
++++ b/Editor/TomCatInut/src/EditorLayer.cpp
+@@ -1,5 +1,8 @@
+ #include "EditorLayer.h"
+ #include <imgui/imgui.h>
++#ifdef __EMSCRIPTEN__
++#include <imgui/imgui_internal.h>
++#endif
+ 
+ #include <glm/gtc/matrix_transform.hpp>
+ #include <glm/gtc/type_ptr.hpp>
+@@ -16,6 +19,15 @@ namespace TomCat {
+ 
+ 	extern const std::filesystem::path g_AssetPath;
+ 
++	static std::filesystem::path PathFromPayload(const ImGuiPayload* payload)
++	{
++#ifdef __EMSCRIPTEN__
++		return std::filesystem::path(static_cast<const char*>(payload->Data));
++#else
++		return std::filesystem::path(static_cast<const wchar_t*>(payload->Data));
++#endif
++	}
++
+ 	EditorLayer::EditorLayer()
+ 		: Layer("EditorLayer"), m_CameraController(1280.0f / 720.0f), m_SquareColor({ 0.2f, 0.3f, 0.8f, 1.0f })
+ 	{
+@@ -232,7 +244,12 @@ namespace TomCat {
+ 
+ 				ImGui::Separator();
+ 
+-				if (ImGui::MenuItem("Exit")) Application::Get().Close();
++				if (ImGui::MenuItem("Exit"))
++				{
++#ifndef __EMSCRIPTEN__
++					Application::Get().Close();
++#endif
++				}
+ 				ImGui::EndMenu();
+ 			}
+ 
+@@ -274,6 +291,35 @@ namespace TomCat {
+ 		if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable)
+ 		{
+ 			ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
++
++#ifdef __EMSCRIPTEN__
++			// A desktop run normally restores this layout from imgui.ini.  A
++			// browser starts with an empty virtual filesystem, so create the
++			// same editor arrangement once instead of stacking every window at
++			// the origin.
++			static bool webDockInitialized = false;
++			if (!webDockInitialized && ImGui::GetFrameCount() > 1)
++			{
++				webDockInitialized = true;
++				ImGui::DockBuilderRemoveNode(dockspace_id);
++				ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
++				ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
++
++				ImGuiID leftNode = 0, rightNode = 0, centerNode = 0;
++				ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.22f, &leftNode, &centerNode);
++				ImGui::DockBuilderSplitNode(centerNode, ImGuiDir_Right, 0.24f, &rightNode, &centerNode);
++				ImGuiID bottomNode = 0;
++				ImGui::DockBuilderSplitNode(centerNode, ImGuiDir_Down, 0.24f, &bottomNode, &centerNode);
++
++				ImGui::DockBuilderDockWindow("Hierarchy", leftNode);
++				ImGui::DockBuilderDockWindow("Inspector", rightNode);
++				ImGui::DockBuilderDockWindow("Scene", centerNode);
++				ImGui::DockBuilderDockWindow("Game", centerNode);
++				ImGui::DockBuilderDockWindow("Project", bottomNode);
++				ImGui::DockBuilderFinish(dockspace_id);
++			}
++#endif
++
+ 			ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
+ 		}
+ 
+@@ -297,7 +343,9 @@ namespace TomCat {
+ 
+ 		m_ViewportFocused = ImGui::IsWindowFocused();
+ 		m_ViewportHovered = ImGui::IsWindowHovered();
++#ifndef __EMSCRIPTEN__
+ 		Application::Get().GetImGuiLayer()->BlockEvents(!m_ViewportFocused && !m_ViewportHovered);
++#endif
+ 
+ 		ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
+ 		m_ViewportSize = { viewportPanelSize.x, viewportPanelSize.y };
+@@ -312,8 +360,7 @@ namespace TomCat {
+ 
+ 			ImGuiDragDropFlags flags = ImGuiDragDropFlags_AcceptNoDrawDefaultRect;
+ 			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SPRITE", flags)) {
+-				const wchar_t* path = (const wchar_t*)payload->Data;
+-				std::filesystem::path texturePath = assetPath / path;
++				std::filesystem::path texturePath = assetPath / PathFromPayload(payload);
+ 				std::string fileName = texturePath.stem().string();
+ 
+ 				auto Square = m_ActiveScene->CreateEntity(fileName);
+@@ -718,4 +765,89 @@ namespace TomCat {
+ 		if (selectedEntity)
+ 			m_EditorScene->DuplicateEntity(selectedEntity);
+ 	}
+-}
+\ No newline at end of file
++
++#ifdef __EMSCRIPTEN__
++	void EditorLayer::WebInitializeDemoScene()
++	{
++		// Seed the editor with the same small scene used by the Web runtime.  The
++		// scene remains an ordinary upstream Scene, so all hierarchy, inspector,
++		// gizmo and serialization code follows the desktop path afterwards.
++		auto scene = CreateRef<Scene>();
++		const uint32_t width = m_ViewportSize.x > 0.0f ? (uint32_t)m_ViewportSize.x : 1280u;
++		const uint32_t height = m_ViewportSize.y > 0.0f ? (uint32_t)m_ViewportSize.y : 720u;
++		scene->OnViewportResize(width, height);
++
++		Entity camera = scene->CreateEntity("Main Camera");
++		camera.GetComponent<Transform>()._Translation = glm::vec3(0.0f, 0.0f, 0.0f);
++		auto& cameraComponent = camera.AddComponent<C_Camera>();
++		cameraComponent._Camera.SetOrthographic(5.0f, -1.0f, 1.0f);
++		cameraComponent._Camera.SetViewportSize(width, height);
++		cameraComponent.Primary = true;
++
++		Entity ground = scene->CreateEntity("Ground");
++		ground.GetComponent<Transform>()._Translation = glm::vec3(0.0f, -2.0f, 0.0f);
++		ground.GetComponent<Transform>()._Scale = glm::vec3(8.0f, 1.0f, 1.0f);
++		ground.AddComponent<SpriteRenderer>(glm::vec4(0.25f, 0.35f, 0.45f, 1.0f));
++		ground.AddComponent<Rigidbody2D>();
++		auto& groundCollider = ground.AddComponent<BoxCollider2D>();
++		groundCollider.Size = glm::vec2(4.0f, 0.5f);
++
++		Entity player = scene->CreateEntity("Player");
++		player.GetComponent<Transform>()._Translation = glm::vec3(0.0f, 0.0f, 0.0f);
++		player.GetComponent<Transform>()._Scale = glm::vec3(0.5f, 0.5f, 1.0f);
++		player.AddComponent<SpriteRenderer>(glm::vec4(0.95f, 0.55f, 0.25f, 1.0f));
++		auto& rigidbody = player.AddComponent<Rigidbody2D>();
++		rigidbody.Type = Rigidbody2D::BodyType::Dynamic;
++		rigidbody.FixedRotation = true;
++		auto& boxCollider = player.AddComponent<BoxCollider2D>();
++		boxCollider.Size = glm::vec2(0.25f, 0.25f);
++
++		m_EditorScene = scene;
++		m_ActiveScene = scene;
++		m_SceneState = SceneState::Edit;
++		m_EditorScenePath.clear();
++		m_CurrentScenePath.clear();
++		m_SceneDirty = true;
++		m_SceneHierarchyPanel.SetContext(scene, true);
++		m_ContentBrowserPanel.SetProject(m_CurrentProject);
++	}
++
++	bool EditorLayer::WebLoadScene(const std::filesystem::path& path)
++	{
++		if (path.empty() || path.extension() != ".tomcat")
++			return false;
++		OpenScene(path);
++		return m_EditorScene && m_EditorScenePath == path;
++	}
++
++	bool EditorLayer::WebSaveScene(const std::filesystem::path& path)
++	{
++		if (path.empty() || !m_ActiveScene)
++			return false;
++		SerializeScene(m_EditorScene ? m_EditorScene : m_ActiveScene, path);
++		m_EditorScenePath = path;
++		m_CurrentScenePath = path;
++		m_SceneDirty = false;
++		return true;
++	}
++
++	void EditorLayer::WebSetProject(Ref<Project> project)
++	{
++		m_CurrentProject = project;
++		ProjectManager::Get().SetActiveProject(project);
++		m_ContentBrowserPanel.SetProject(project);
++	}
++
++	void EditorLayer::WebPlay()
++	{
++		if (m_SceneState == SceneState::Edit && m_EditorScene)
++			OnScenePlay();
++	}
++
++	void EditorLayer::WebStop()
++	{
++		if (m_SceneState == SceneState::Play)
++			OnSceneStop();
++	}
++#endif
++}
+diff --git a/Editor/TomCatInut/src/EditorLayer.h b/Editor/TomCatInut/src/EditorLayer.h
+index f0f14fe..57623f6 100644
+--- a/Editor/TomCatInut/src/EditorLayer.h
++++ b/Editor/TomCatInut/src/EditorLayer.h
+@@ -23,6 +23,19 @@ namespace TomCat {
+ 		void OnUpdate(Timestep ts) override;
+ 		virtual void OnImGuiRender() override;
+ 		void OnEvent(Event& e) override;
++
++#ifdef __EMSCRIPTEN__
++		// Browser hosts do not have a native file picker or a desktop
++		// Application singleton.  The host can seed the same EditorLayer used by
++		// the desktop editor through these small lifecycle helpers.
++		void WebInitializeDemoScene();
++		bool WebLoadScene(const std::filesystem::path& path);
++		bool WebSaveScene(const std::filesystem::path& path);
++		void WebSetProject(Ref<Project> project);
++		void WebPlay();
++		void WebStop();
++		Ref<Scene> WebGetActiveScene() const { return m_ActiveScene; }
++#endif
+ 	private:
+ 		bool OnKeyPressed(KeyPressedEvent& e);
+ 		bool OnMouseButtonPressed(MouseButtonPressedEvent& e);
+@@ -94,4 +107,4 @@ namespace TomCat {
+ 		bool m_SceneDirty = false;
+ 	};
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/Editor/TomCatInut/src/panels/ContentBrowserPanel.cpp b/Editor/TomCatInut/src/panels/ContentBrowserPanel.cpp
+index 7c477de..e526ae6 100644
+--- a/Editor/TomCatInut/src/panels/ContentBrowserPanel.cpp
++++ b/Editor/TomCatInut/src/panels/ContentBrowserPanel.cpp
+@@ -24,6 +24,38 @@ namespace TomCat {
+ 	L".png", L".jpg", L".jpeg", L".bmp", L".tga", L".gif", L".webp", L".psd", L".hdr", L".pic"
+ 	};
+ 
++	// ImGui payloads used by the desktop editor contain UTF-16 paths because
++	// Windows' std::filesystem::path uses wchar_t as its native value type.
++	// Emscripten/libc++ uses UTF-8 char paths instead.  Keep the payload format
++	// native to each target and centralize the conversion so the panel remains
++	// the upstream implementation on desktop while accepting browser paths.
++	static void SetPathPayload(const char* type, const std::filesystem::path& path)
++	{
++#ifdef __EMSCRIPTEN__
++		std::string encoded = path.generic_string();
++		ImGui::SetDragDropPayload(type, encoded.c_str(), encoded.size() + 1);
++#else
++		std::wstring encoded = path.wstring();
++		ImGui::SetDragDropPayload(type, encoded.c_str(), (encoded.size() + 1) * sizeof(wchar_t));
++#endif
++	}
++
++	static bool IsScenePath(const std::filesystem::path& path)
++	{
++		std::string extension = path.extension().string();
++		std::transform(extension.begin(), extension.end(), extension.begin(),
++			[](unsigned char c) { return (char)std::tolower(c); });
++		return extension == ".tomcat" || extension == ".tcproj";
++	}
++
++	static bool IsImagePath(const std::filesystem::path& path)
++	{
++		std::string extension = path.extension().string();
++		std::transform(extension.begin(), extension.end(), extension.begin(),
++			[](unsigned char c) { return (char)std::tolower(c); });
++		return s_ImageExtensions.find(extension) != s_ImageExtensions.end();
++	}
++
+ 	bool ShowMenu = false;
+ 
+ 	ImVec2 MenuPosi;
+@@ -410,20 +442,17 @@ namespace TomCat {
+             auto project = ProjectManager::Get().GetActiveProject();
+             std::filesystem::path assetPath = project ? project->GetAssetPath() : g_AssetPath;
+             auto relativePath = std::filesystem::relative(path, assetPath);
+-            const wchar_t* itemPath = relativePath.c_str();
+-
+-            std::wstring ext = relativePath.extension().wstring();
+ 
+-            TC_Core_Assert(!ext.empty());
++			TC_Core_Assert(!relativePath.extension().empty());
+ 
+-            if (ext == L".tomcat" || ext == L".tcproj")
++			if (IsScenePath(relativePath))
+             {
+-                ImGui::SetDragDropPayload("TOMCAT_SCENE", itemPath, (wcslen(itemPath) + 1) * sizeof(wchar_t));
++                SetPathPayload("TOMCAT_SCENE", relativePath);
+                 ImGui::Image((ImTextureID)m_FileIcon->GetRendererID(), { 64, 64 }, { 0, 1 }, { 1, 0 });
+             }
+-            else if (s_ImageExtensionsW.find(ext) != s_ImageExtensionsW.end())
++			else if (IsImagePath(relativePath))
+             {
+-                ImGui::SetDragDropPayload("SPRITE", itemPath, (wcslen(itemPath) + 1) * sizeof(wchar_t));
++                SetPathPayload("SPRITE", relativePath);
+                 ImGui::Image((ImTextureID)m_ImageCache[path.string()]->GetRendererID(), { 64, 64 }, { 0, 1 }, { 1, 0 });
+             }
+ 
+@@ -804,18 +833,16 @@ namespace TomCat {
+ 
+                         if (ImGui::BeginDragDropSource())
+                         {
+-                            const wchar_t* itemPath = relativePathItem.c_str();
+-                            std::wstring extension = relativePathItem.extension().wstring();
+-                            TC_Core_Assert(!extension.empty());
++							TC_Core_Assert(!relativePathItem.extension().empty());
+ 
+-                            if (extension == L".tomcat" || extension == L".tcproj")
++							if (IsScenePath(relativePathItem))
+                             {
+-                                ImGui::SetDragDropPayload("TOMCAT_SCENE", itemPath, (wcslen(itemPath) + 1) * sizeof(wchar_t));
++                                SetPathPayload("TOMCAT_SCENE", relativePathItem);
+                                 ImGui::Image((ImTextureID)m_FileIcon->GetRendererID(), { 64, 64 }, { 0, 1 }, { 1, 0 });
+                             }
+-                            else if (s_ImageExtensionsW.find(extension) != s_ImageExtensionsW.end())
++							else if (IsImagePath(relativePathItem))
+                             {
+-                                ImGui::SetDragDropPayload("SPRITE", itemPath, (wcslen(itemPath) + 1) * sizeof(wchar_t));
++                                SetPathPayload("SPRITE", relativePathItem);
+                                 ImGui::Image((ImTextureID)icon->GetRendererID(), { 64, 64 }, { 0, 1 }, { 1, 0 });
+                             }
+ 
+@@ -832,7 +859,7 @@ namespace TomCat {
+                             }
+                         }
+ 
+-                        ImGui::TextWrapped(filenameString.c_str());
++                        ImGui::TextWrapped("%s", filenameString.c_str());
+                         ImGui::NextColumn();
+                         ImGui::PopID();
+                     }
+@@ -874,4 +901,4 @@ namespace TomCat {
+         ImGui::End();
+     }
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/Editor/TomCatInut/src/panels/SceneHierarchyPanel.cpp b/Editor/TomCatInut/src/panels/SceneHierarchyPanel.cpp
+index 628c6fe..6419cdc 100644
+--- a/Editor/TomCatInut/src/panels/SceneHierarchyPanel.cpp
++++ b/Editor/TomCatInut/src/panels/SceneHierarchyPanel.cpp
+@@ -5,6 +5,8 @@
+ 
+ #include <glm/gtc/type_ptr.hpp>
+ 
++#include <cstring>
++
+ #include "TomCat/Scene/Components.h"
+ #include "TomCat/Project/ProjectManager.h"
+ 
+@@ -14,6 +16,17 @@ namespace TomCat {
+ 
+ 	extern const std::filesystem::path g_AssetPath;
+ 
++	// Drag/drop paths are UTF-16 on Windows and UTF-8 on Emscripten.  The
++	// browser backend uses the latter because libc++'s path value_type is char.
++	static std::filesystem::path PathFromPayload(const ImGuiPayload* payload)
++	{
++#ifdef __EMSCRIPTEN__
++		return std::filesystem::path(static_cast<const char*>(payload->Data));
++#else
++		return std::filesystem::path(static_cast<const wchar_t*>(payload->Data));
++#endif
++	}
++
+ 
+ 	// 前向声明DrawProperty函数
+ 	static void DrawProperty(const std::string& label, float columnWidth = 100.0f);
+@@ -87,22 +100,20 @@ namespace TomCat {
+ 			ImGuiDragDropFlags flags = ImGuiDragDropFlags_AcceptNoDrawDefaultRect;
+ 			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("TOMCAT_SCENE", flags))
+ 			{
+-				const wchar_t* path = (const wchar_t*)payload->Data;
+ 				if (m_SceneLoadCallback)
+ 				{
+ 					auto project = ProjectManager::Get().GetActiveProject();
+ 					std::filesystem::path assetPath = project ? project->GetAssetPath() : g_AssetPath;
+-					m_SceneLoadCallback(assetPath / path);
++					m_SceneLoadCallback(assetPath / PathFromPayload(payload));
+ 				}
+ 			}
+ 			else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SPRITE", flags))
+ 			{
+-				const wchar_t* path = (const wchar_t*)payload->Data;
+ 				if (m_SpriteCreateCallback)
+ 				{
+ 					auto project = ProjectManager::Get().GetActiveProject();
+ 					std::filesystem::path assetPath = project ? project->GetAssetPath() : g_AssetPath;
+-					m_SpriteCreateCallback(assetPath / path);
++					m_SpriteCreateCallback(assetPath / PathFromPayload(payload));
+ 				}
+ 			}
+ 			ImGui::EndDragDropTarget();
+@@ -352,7 +363,12 @@ static void DrawComponent(const std::string& name, Entity entity, UIFunction uiF
+ 			// 安全复制 - 确保即使空字符串也能正确处理
+ 			const std::string& source = (isEditing && editingEntity == entity) ? editBuffer : tag;
+ 			if (!source.empty()) {
++#ifdef _WIN32
+ 				strncpy_s(buffer, sizeof(buffer), source.c_str(), _TRUNCATE);
++#else
++				std::strncpy(buffer, source.c_str(), sizeof(buffer) - 1);
++				buffer[sizeof(buffer) - 1] = '\0';
++#endif
+ 			}
+ 
+ 			// 设置输入文本标志，允许空输入
+@@ -570,8 +586,7 @@ static void DrawComponent(const std::string& name, Entity entity, UIFunction uiF
+ 				{
+ 					auto project = ProjectManager::Get().GetActiveProject();
+ 					std::filesystem::path assetPath = project ? project->GetAssetPath() : g_AssetPath;
+-					const wchar_t* path = (const wchar_t*)payload->Data;
+-					std::filesystem::path texturePath = assetPath / path;
++					std::filesystem::path texturePath = assetPath / PathFromPayload(payload);
+ 
+ 					Ref<Texture2D> texture = Texture2D::Create(texturePath.string());
+ 					if (texture->IsLoaded())
+@@ -627,4 +642,4 @@ static void DrawComponent(const std::string& name, Entity entity, UIFunction uiF
+ 
+ 	}
+ 
+-}
+\ No newline at end of file
++}
 diff --git a/TomCat/src/TomCat/Core/Base.h b/TomCat/src/TomCat/Core/Base.h
 index ddf8173..70c6908 100644
 --- a/TomCat/src/TomCat/Core/Base.h
@@ -67,6 +581,196 @@ index 4b63a81..44dc5ad 100644
  								virtual EventType GetEventType() const override { return GetStaticType(); }\
  								virtual const char* GetName() const override { return #type; }
  
+diff --git a/TomCat/src/TomCat/ImGui/ImGuiLayer.cpp b/TomCat/src/TomCat/ImGui/ImGuiLayer.cpp
+index 7ba01ae..04547a6 100644
+--- a/TomCat/src/TomCat/ImGui/ImGuiLayer.cpp
++++ b/TomCat/src/TomCat/ImGui/ImGuiLayer.cpp
+@@ -8,7 +8,11 @@
+ #include "TomCat/Core/Application.h"
+ 
+ #include <GLFW/glfw3.h>
++#ifdef __EMSCRIPTEN__
++#include <GLES3/gl3.h>
++#else
+ #include <Glad/glad.h>
++#endif
+ #include <filesystem>
+ 
+ #include"ImGuizmo.h"
+@@ -33,7 +37,13 @@ namespace TomCat {
+ 		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;       // Enable Keyboard Controls
+ 		//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+ 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;           // Enable Docking
++		// WebGL canvases have one browser-owned platform window; Emscripten's
++		// GLFW backend does not implement Dear ImGui's native multi-viewport
++		// platform callbacks.  Docking itself remains enabled so the editor
++		// layout matches the desktop build.
++#ifndef __EMSCRIPTEN__
+ 		io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;         // Enable Multi-Viewport / Platform Windows
++#endif
+ 		// Disable ImGui's automatic .ini save so custom sections we append to imgui.ini
+ 		// (e.g. [ContentBrowser] layout) are never overwritten. Window layouts are saved
+ 		// explicitly by the Editor (project folder imgui.ini).
+@@ -41,8 +51,13 @@ namespace TomCat {
+ 		//io.ConfigFlags |= ImGuiConfigFlags_ViewportsNoTaskBarIcons;
+ 		//io.ConfigFlags |= ImGuiConfigFlags_ViewportsNoMerge;
+ 
+-						io.Fonts->AddFontFromFileTTF("Packages/fonts/opensans/OpenSans-Bold.ttf", 32.0f);
+-		io.FontDefault = io.Fonts->AddFontFromFileTTF("Packages/fonts/opensans/OpenSans-Regular.ttf", 32.0f);
++#ifdef __EMSCRIPTEN__
++		const float uiFontSize = 18.0f;
++#else
++		const float uiFontSize = 32.0f;
++#endif
++		io.Fonts->AddFontFromFileTTF("Packages/fonts/opensans/OpenSans-Bold.ttf", uiFontSize);
++		io.FontDefault = io.Fonts->AddFontFromFileTTF("Packages/fonts/opensans/OpenSans-Regular.ttf", uiFontSize);
+ 
+ 		// Make the UI support Chinese and common symbols.
+ 		// The character set is built dynamically with ImFontGlyphRangesBuilder: it collects
+@@ -84,8 +99,21 @@ namespace TomCat {
+ 				0
+ 			};
+ 
++#ifdef __EMSCRIPTEN__
++			// Browser builds only see files mounted in Emscripten's virtual
++			// filesystem.  Keep the fallback on a packaged font instead of probing
++			// the host's Windows font directory (which is unavailable in WASM).
++			const char* cnFontPath = "Packages/fonts/opensans/OpenSans-Regular.ttf";
++			const char* symFontPath = "Packages/fonts/opensans/OpenSans-Regular.ttf";
++#else
++#ifdef __EMSCRIPTEN__
++			const char* cnFontPath = "Packages/fonts/opensans/OpenSans-Regular.ttf";
++			const char* symFontPath = "Packages/fonts/opensans/OpenSans-Regular.ttf";
++#else
+ 			const char* cnFontPath = "C:/Windows/Fonts/simhei.ttf";
+ 			const char* symFontPath = "C:/Windows/Fonts/seguisym.ttf";
++#endif
++#endif
+ 
+ 			ImFontConfig mergeCfg;
+ 			mergeCfg.MergeMode = true;
+@@ -93,16 +121,16 @@ namespace TomCat {
+ 			if (std::filesystem::exists(cnFontPath))
+ 			{
+ 				mergeCfg.DstFont = io.Fonts->Fonts[0]; // OpenSans-Bold + Chinese
+-				io.Fonts->AddFontFromFileTTF(cnFontPath, 32.0f, &mergeCfg, sUIRanges.Data);
++				io.Fonts->AddFontFromFileTTF(cnFontPath, uiFontSize, &mergeCfg, sUIRanges.Data);
+ 				mergeCfg.DstFont = io.Fonts->Fonts[1]; // OpenSans-Regular + Chinese (default)
+-				io.Fonts->AddFontFromFileTTF(cnFontPath, 32.0f, &mergeCfg, sUIRanges.Data);
++				io.Fonts->AddFontFromFileTTF(cnFontPath, uiFontSize, &mergeCfg, sUIRanges.Data);
+ 			}
+ 			if (std::filesystem::exists(symFontPath))
+ 			{
+ 				mergeCfg.DstFont = io.Fonts->Fonts[0];
+-				io.Fonts->AddFontFromFileTTF(symFontPath, 32.0f, &mergeCfg, symRanges);
++				io.Fonts->AddFontFromFileTTF(symFontPath, uiFontSize, &mergeCfg, symRanges);
+ 				mergeCfg.DstFont = io.Fonts->Fonts[1];
+-				io.Fonts->AddFontFromFileTTF(symFontPath, 32.0f, &mergeCfg, symRanges);
++				io.Fonts->AddFontFromFileTTF(symFontPath, uiFontSize, &mergeCfg, symRanges);
+ 			}
+ 		}
+ 
+@@ -120,12 +148,23 @@ namespace TomCat {
+ 
+ 		SetDarkThemeColors();
+ 
++		GLFWwindow* window = nullptr;
++#ifdef __EMSCRIPTEN__
++		window = glfwGetCurrentContext();
++#else
+ 		Application& app = Application::Get();
+-		GLFWwindow* window = static_cast<GLFWwindow*>(app.GetWindow().GetNativeWindow());
++		window = static_cast<GLFWwindow*>(app.GetWindow().GetNativeWindow());
++#endif
+ 
+ 		// Setup Platform/Renderer bindings
+ 		ImGui_ImplGlfw_InitForOpenGL(window, true);
+-		ImGui_ImplOpenGL3_Init("#version 410");
++		ImGui_ImplOpenGL3_Init(
++#ifdef __EMSCRIPTEN__
++			"#version 300 es"
++#else
++			"#version 410"
++#endif
++		);
+ 	}
+ 
+ 	void ImGuiLayer::OnDetach()
+@@ -165,8 +204,10 @@ namespace TomCat {
+ 		TC_PROFILE_FUNCTION();
+ 
+ 		ImGuiIO& io = ImGui::GetIO();
++#ifndef __EMSCRIPTEN__
+ 		Application& app = Application::Get();
+ 		io.DisplaySize = ImVec2((float)app.GetWindow().GetWidth(), (float)app.GetWindow().GetHeight());
++#endif
+ 
+ 		// Rendering
+ 		ImGui::Render();
+@@ -214,4 +255,4 @@ namespace TomCat {
+ 		colors[ImGuiCol_TitleBgCollapsed] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
+ 	}
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/TomCat/src/TomCat/Project/ProjectManager.cpp b/TomCat/src/TomCat/Project/ProjectManager.cpp
+index 2ece3de..cd3e56d 100644
+--- a/TomCat/src/TomCat/Project/ProjectManager.cpp
++++ b/TomCat/src/TomCat/Project/ProjectManager.cpp
+@@ -232,6 +232,16 @@ namespace TomCat {
+ 		if (!project)
+ 			return;
+ 
++#ifdef __EMSCRIPTEN__
++		// A browser tab is already the editor process.  The Web host owns tab
++		// navigation and can call WebSetProject/WebLoadScene on the existing
++		// EditorLayer, so there is no Win32 process to launch here.
++		m_ActiveProject = project;
++		if (m_OnProjectLoaded)
++			m_OnProjectLoaded(project);
++		return;
++#else
++
+ 		// Record the last opened time before launching the editor.
+ 		project->Touch();
+ 
+@@ -269,6 +279,7 @@ namespace TomCat {
+ 		{
+ 			TC_Core_Error("Failed to open editor. Error code: {0}", GetLastError());
+ 		}
++#endif
+ 	}
+ 
+ 	bool ProjectManager::IsProjectFile(const std::filesystem::path& path) const
+@@ -388,4 +399,4 @@ namespace TomCat {
+ 		}
+ 	}
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/TomCat/src/TomCat/Renderer/Framebuffer.h b/TomCat/src/TomCat/Renderer/Framebuffer.h
+index 1838192..88487b1 100644
+--- a/TomCat/src/TomCat/Renderer/Framebuffer.h
++++ b/TomCat/src/TomCat/Renderer/Framebuffer.h
+@@ -1,6 +1,8 @@
+ #pragma once
+ #include"TomCat/Core/Base.h"
+ 
++#include <vector>
++
+ namespace TomCat {
+ 
+ 
+@@ -54,6 +56,7 @@ namespace TomCat {
+ 	class  Framebuffer
+ 	{
+ 	public:
++		virtual ~Framebuffer() = default;
+ 
+ 		virtual void Bind() = 0;
+ 		virtual void Unbind() = 0;
 diff --git a/TomCat/src/TomCat/Renderer/Renderer2D.cpp b/TomCat/src/TomCat/Renderer/Renderer2D.cpp
 index 581983d..5fac0eb 100644
 --- a/TomCat/src/TomCat/Renderer/Renderer2D.cpp
@@ -210,6 +914,172 @@ index 733ede4..baa10a0 100644
  
  	}
  
+-}
+\ No newline at end of file
++}
+diff --git a/TomCat/src/platform/OpenGL/OpenGLFramebuffer.cpp b/TomCat/src/platform/OpenGL/OpenGLFramebuffer.cpp
+index 0bc7f28..cec080e 100644
+--- a/TomCat/src/platform/OpenGL/OpenGLFramebuffer.cpp
++++ b/TomCat/src/platform/OpenGL/OpenGLFramebuffer.cpp
+@@ -1,7 +1,11 @@
+ #include "tcpch.h"
+ #include "OpenGLFramebuffer.h"
+ 
+-#include<glad/glad.h>
++#ifdef __EMSCRIPTEN__
++#include <GLES3/gl3.h>
++#else
++#include <glad/glad.h>
++#endif
+ 
+ namespace TomCat {
+ 
+@@ -11,12 +15,23 @@ namespace TomCat {
+ 
+ 		static GLenum TextureTarget(bool multisampled)
+ 		{
++		#ifdef __EMSCRIPTEN__
++			(void)multisampled;
++			return GL_TEXTURE_2D;
++		#else
+ 			return multisampled ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
++		#endif
+ 		}
+ 
+ 		static void CreateTextures(bool multisampled, uint32_t* outID, uint32_t count)
+ 		{
++		#ifdef __EMSCRIPTEN__
++			// GLES3/WebGL2 does not expose the desktop DSA texture creation
++			// entry points used by the native renderer.
++			glGenTextures((GLsizei)count, outID);
++		#else
+ 			glCreateTextures(TextureTarget(multisampled), count, outID);
++		#endif
+ 		}
+ 
+ 		static void BindTexture(bool multisampled, uint32_t id)
+@@ -26,44 +41,61 @@ namespace TomCat {
+ 
+ 		static void AttachColorTexture(uint32_t id, int samples, GLenum internalFormat, GLenum format, uint32_t width, uint32_t height, int index)
+ 		{
+-			bool multisampled = samples > 1;
++		#ifdef __EMSCRIPTEN__
++			// WebGL2 has no multisample texture target.  The Web adapter requests
++			// regular 2D attachments even when a desktop project asks for MSAA.
++			(void)samples;
++			GLenum type = format == GL_RED_INTEGER ? GL_INT : GL_UNSIGNED_BYTE;
++			glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, nullptr);
++			const GLint filter = format == GL_RED_INTEGER ? GL_NEAREST : GL_LINEAR;
++			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
++			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
++			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
++			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
++			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + index, GL_TEXTURE_2D, id, 0);
++		#else
++			const bool multisampled = samples > 1;
+ 			if (multisampled)
+-			{
+ 				glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, internalFormat, width, height, GL_FALSE);
+-			}
+ 			else
+ 			{
+ 				glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, GL_UNSIGNED_BYTE, nullptr);
+-
+ 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+ 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+ 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+ 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+ 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+ 			}
+-
+ 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + index, TextureTarget(multisampled), id, 0);
++		#endif
+ 		}
+ 
+ 		static void AttachDepthTexture(uint32_t id, int samples, GLenum format, GLenum attachmentType, uint32_t width, uint32_t height)
+ 		{
+-			bool multisampled = samples > 1;
++		#ifdef __EMSCRIPTEN__
++			(void)samples;
++			glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0,
++				GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
++			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
++			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
++			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
++			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
++			glFramebufferTexture2D(GL_FRAMEBUFFER, attachmentType, GL_TEXTURE_2D, id, 0);
++		#else
++			const bool multisampled = samples > 1;
+ 			if (multisampled)
+-			{
+ 				glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, format, width, height, GL_FALSE);
+-			}
+ 			else
+ 			{
+ 				glTexStorage2D(GL_TEXTURE_2D, 1, format, width, height);
+-
+ 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+ 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+ 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+ 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+ 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+ 			}
+-
+ 			glFramebufferTexture2D(GL_FRAMEBUFFER, attachmentType, TextureTarget(multisampled), id, 0);
++		#endif
+ 		}
+ 
+ 		static bool IsDepthFormat(FramebufferTextureFormat format)
+@@ -123,10 +155,19 @@ namespace TomCat {
+ 			m_DepthAttachment = 0;
+ 		}
+ 
++		#ifdef __EMSCRIPTEN__
++		glGenFramebuffers(1, &m_RendererID);
++		#else
+ 		glCreateFramebuffers(1, &m_RendererID);
++		#endif
+ 		glBindFramebuffer(GL_FRAMEBUFFER, m_RendererID);
+ 
+ 		bool multisample = m_Specification.Samples > 1;
++#ifdef __EMSCRIPTEN__
++		// WebGL2 exposes multisample renderbuffers, but not the texture target
++		// used by this framebuffer class.  Use a regular 2D texture consistently.
++		multisample = false;
++#endif
+ 
+ 		// Attachments
+ 		if (m_ColorAttachmentSpecifications.size())
+@@ -170,7 +211,11 @@ namespace TomCat {
+ 		else if (m_ColorAttachments.empty())
+ 		{
+ 			// Only depth-pass
++		#ifdef __EMSCRIPTEN__
++			glDrawBuffers(0, nullptr);
++		#else
+ 			glDrawBuffer(GL_NONE);
++		#endif
+ 		}
+ 
+ 		TC_Core_Assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE, "Framebuffer is incomplete!");
+@@ -212,8 +257,18 @@ namespace TomCat {
+ 	{
+ 		TC_Core_Assert(attachmentIndex < m_ColorAttachments.size());
+ 
++	#ifdef __EMSCRIPTEN__
++		// glClearTexImage is desktop GL 4.4.  Clear the attached integer
++		// target through the GLES3 framebuffer API instead.
++		GLint previous = 0;
++		glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previous);
++		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_RendererID);
++		glClearBufferiv(GL_COLOR, (GLint)attachmentIndex, &value);
++		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)previous);
++	#else
+ 		auto& spec = m_ColorAttachmentSpecifications[attachmentIndex];
+ 		glClearTexImage(m_ColorAttachments[attachmentIndex], 0,
+ 			Utils::TomCatFBTextureFormatToGL(spec.TextureFormat), GL_INT, &value);
++	#endif
+ 	}
 -}
 \ No newline at end of file
 +}
@@ -1271,626 +2141,3 @@ index 9f8687b..1fa9a03 100644
      (void)glfwGetError(NULL);
  #endif
  
-
-diff --git a/TomCat/src/TomCat/Renderer/Framebuffer.h b/TomCat/src/TomCat/Renderer/Framebuffer.h
-index 1838192..88487b1 100644
---- a/TomCat/src/TomCat/Renderer/Framebuffer.h
-+++ b/TomCat/src/TomCat/Renderer/Framebuffer.h
-@@ -1,6 +1,8 @@
- #pragma once
- #include"TomCat/Core/Base.h"
- 
-+#include <vector>
-+
- namespace TomCat {
- 
- 
-@@ -54,6 +56,7 @@ namespace TomCat {
- 	class  Framebuffer
- 	{
- 	public:
-+		virtual ~Framebuffer() = default;
- 
- 		virtual void Bind() = 0;
- 		virtual void Unbind() = 0;
-diff --git a/TomCat/src/TomCat/Project/ProjectManager.cpp b/TomCat/src/TomCat/Project/ProjectManager.cpp
-index 2ece3de..6c4ce24 100644
---- a/TomCat/src/TomCat/Project/ProjectManager.cpp
-+++ b/TomCat/src/TomCat/Project/ProjectManager.cpp
-@@ -232,6 +232,16 @@ namespace TomCat {
- 		if (!project)
- 			return;
- 
-+#ifdef __EMSCRIPTEN__
-+		// A browser tab is already the editor process.  The Web host owns tab
-+		// navigation and can call WebSetProject/WebLoadScene on the existing
-+		// EditorLayer, so there is no Win32 process to launch here.
-+		m_ActiveProject = project;
-+		if (m_OnProjectLoaded)
-+			m_OnProjectLoaded(project);
-+		return;
-+#else
-+
- 		// Record the last opened time before launching the editor.
- 		project->Touch();
- 
-@@ -269,6 +279,7 @@ namespace TomCat {
- 		{
- 			TC_Core_Error("Failed to open editor. Error code: {0}", GetLastError());
- 		}
-+#endif
- 	}
- 
- 	bool ProjectManager::IsProjectFile(const std::filesystem::path& path) const
-diff --git a/Editor/TomCatInut/src/EditorLayer.h b/Editor/TomCatInut/src/EditorLayer.h
-index f0f14fe..8890bbe 100644
---- a/Editor/TomCatInut/src/EditorLayer.h
-+++ b/Editor/TomCatInut/src/EditorLayer.h
-@@ -23,6 +23,19 @@ namespace TomCat {
- 		void OnUpdate(Timestep ts) override;
- 		virtual void OnImGuiRender() override;
- 		void OnEvent(Event& e) override;
-+
-+#ifdef __EMSCRIPTEN__
-+		// Browser hosts do not have a native file picker or a desktop
-+		// Application singleton.  The host can seed the same EditorLayer used by
-+		// the desktop editor through these small lifecycle helpers.
-+		void WebInitializeDemoScene();
-+		bool WebLoadScene(const std::filesystem::path& path);
-+		bool WebSaveScene(const std::filesystem::path& path);
-+		void WebSetProject(Ref<Project> project);
-+		void WebPlay();
-+		void WebStop();
-+		Ref<Scene> WebGetActiveScene() const { return m_ActiveScene; }
-+#endif
- 	private:
- 		bool OnKeyPressed(KeyPressedEvent& e);
- 		bool OnMouseButtonPressed(MouseButtonPressedEvent& e);
-diff --git a/Editor/TomCatInut/src/EditorLayer.cpp b/Editor/TomCatInut/src/EditorLayer.cpp
-index 06cc6de..d9729a5 100644
---- a/Editor/TomCatInut/src/EditorLayer.cpp
-+++ b/Editor/TomCatInut/src/EditorLayer.cpp
-@@ -16,6 +16,15 @@ namespace TomCat {
- 
- 	extern const std::filesystem::path g_AssetPath;
- 
-+	static std::filesystem::path PathFromPayload(const ImGuiPayload* payload)
-+	{
-+#ifdef __EMSCRIPTEN__
-+		return std::filesystem::path(static_cast<const char*>(payload->Data));
-+#else
-+		return std::filesystem::path(static_cast<const wchar_t*>(payload->Data));
-+#endif
-+	}
-+
- 	EditorLayer::EditorLayer()
- 		: Layer("EditorLayer"), m_CameraController(1280.0f / 720.0f), m_SquareColor({ 0.2f, 0.3f, 0.8f, 1.0f })
- 	{
-@@ -232,7 +241,12 @@ namespace TomCat {
- 
- 				ImGui::Separator();
- 
--				if (ImGui::MenuItem("Exit")) Application::Get().Close();
-+				if (ImGui::MenuItem("Exit"))
-+				{
-+#ifndef __EMSCRIPTEN__
-+					Application::Get().Close();
-+#endif
-+				}
- 				ImGui::EndMenu();
- 			}
- 
-@@ -297,7 +311,9 @@ namespace TomCat {
- 
- 		m_ViewportFocused = ImGui::IsWindowFocused();
- 		m_ViewportHovered = ImGui::IsWindowHovered();
-+#ifndef __EMSCRIPTEN__
- 		Application::Get().GetImGuiLayer()->BlockEvents(!m_ViewportFocused && !m_ViewportHovered);
-+#endif
- 
- 		ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
- 		m_ViewportSize = { viewportPanelSize.x, viewportPanelSize.y };
-@@ -312,8 +328,7 @@ namespace TomCat {
- 
- 			ImGuiDragDropFlags flags = ImGuiDragDropFlags_AcceptNoDrawDefaultRect;
- 			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SPRITE", flags)) {
--				const wchar_t* path = (const wchar_t*)payload->Data;
--				std::filesystem::path texturePath = assetPath / path;
-+				std::filesystem::path texturePath = assetPath / PathFromPayload(payload);
- 				std::string fileName = texturePath.stem().string();
- 
- 				auto Square = m_ActiveScene->CreateEntity(fileName);
-@@ -718,4 +733,89 @@ namespace TomCat {
- 		if (selectedEntity)
- 			m_EditorScene->DuplicateEntity(selectedEntity);
- 	}
-+
-+#ifdef __EMSCRIPTEN__
-+	void EditorLayer::WebInitializeDemoScene()
-+	{
-+		// Seed the editor with the same small scene used by the Web runtime.  The
-+		// scene remains an ordinary upstream Scene, so all hierarchy, inspector,
-+		// gizmo and serialization code follows the desktop path afterwards.
-+		auto scene = CreateRef<Scene>();
-+		const uint32_t width = m_ViewportSize.x > 0.0f ? (uint32_t)m_ViewportSize.x : 1280u;
-+		const uint32_t height = m_ViewportSize.y > 0.0f ? (uint32_t)m_ViewportSize.y : 720u;
-+		scene->OnViewportResize(width, height);
-+
-+		Entity camera = scene->CreateEntity("Main Camera");
-+		camera.GetComponent<Transform>()._Translation = glm::vec3(0.0f, 0.0f, 0.0f);
-+		auto& cameraComponent = camera.AddComponent<C_Camera>();
-+		cameraComponent._Camera.SetOrthographic(5.0f, -1.0f, 1.0f);
-+		cameraComponent._Camera.SetViewportSize(width, height);
-+		cameraComponent.Primary = true;
-+
-+		Entity ground = scene->CreateEntity("Ground");
-+		ground.GetComponent<Transform>()._Translation = glm::vec3(0.0f, -2.0f, 0.0f);
-+		ground.GetComponent<Transform>()._Scale = glm::vec3(8.0f, 1.0f, 1.0f);
-+		ground.AddComponent<SpriteRenderer>(glm::vec4(0.25f, 0.35f, 0.45f, 1.0f));
-+		ground.AddComponent<Rigidbody2D>();
-+		auto& groundCollider = ground.AddComponent<BoxCollider2D>();
-+		groundCollider.Size = glm::vec2(4.0f, 0.5f);
-+
-+		Entity player = scene->CreateEntity("Player");
-+		player.GetComponent<Transform>()._Translation = glm::vec3(0.0f, 0.0f, 0.0f);
-+		player.GetComponent<Transform>()._Scale = glm::vec3(0.5f, 0.5f, 1.0f);
-+		player.AddComponent<SpriteRenderer>(glm::vec4(0.95f, 0.55f, 0.25f, 1.0f));
-+		auto& rigidbody = player.AddComponent<Rigidbody2D>();
-+		rigidbody.Type = Rigidbody2D::BodyType::Dynamic;
-+		rigidbody.FixedRotation = true;
-+		auto& boxCollider = player.AddComponent<BoxCollider2D>();
-+		boxCollider.Size = glm::vec2(0.25f, 0.25f);
-+
-+		m_EditorScene = scene;
-+		m_ActiveScene = scene;
-+		m_SceneState = SceneState::Edit;
-+		m_EditorScenePath.clear();
-+		m_CurrentScenePath.clear();
-+		m_SceneDirty = true;
-+		m_SceneHierarchyPanel.SetContext(scene, true);
-+		m_ContentBrowserPanel.SetProject(m_CurrentProject);
-+	}
-+
-+	bool EditorLayer::WebLoadScene(const std::filesystem::path& path)
-+	{
-+		if (path.empty() || path.extension() != ".tomcat")
-+			return false;
-+		OpenScene(path);
-+		return m_EditorScene && m_EditorScenePath == path;
-+	}
-+
-+	bool EditorLayer::WebSaveScene(const std::filesystem::path& path)
-+	{
-+		if (path.empty() || !m_ActiveScene)
-+			return false;
-+		SerializeScene(m_EditorScene ? m_EditorScene : m_ActiveScene, path);
-+		m_EditorScenePath = path;
-+		m_CurrentScenePath = path;
-+		m_SceneDirty = false;
-+		return true;
-+	}
-+
-+	void EditorLayer::WebSetProject(Ref<Project> project)
-+	{
-+		m_CurrentProject = project;
-+		ProjectManager::Get().SetActiveProject(project);
-+		m_ContentBrowserPanel.SetProject(project);
-+	}
-+
-+	void EditorLayer::WebPlay()
-+	{
-+		if (m_SceneState == SceneState::Edit && m_EditorScene)
-+			OnScenePlay();
-+	}
-+
-+	void EditorLayer::WebStop()
-+	{
-+		if (m_SceneState == SceneState::Play)
-+			OnSceneStop();
-+	}
-+#endif
- }
-diff --git a/Editor/TomCatInut/src/panels/ContentBrowserPanel.cpp b/Editor/TomCatInut/src/panels/ContentBrowserPanel.cpp
-index 7c477de..ca270db 100644
---- a/Editor/TomCatInut/src/panels/ContentBrowserPanel.cpp
-+++ b/Editor/TomCatInut/src/panels/ContentBrowserPanel.cpp
-@@ -24,6 +24,38 @@ namespace TomCat {
- 	L".png", L".jpg", L".jpeg", L".bmp", L".tga", L".gif", L".webp", L".psd", L".hdr", L".pic"
- 	};
- 
-+	// ImGui payloads used by the desktop editor contain UTF-16 paths because
-+	// Windows' std::filesystem::path uses wchar_t as its native value type.
-+	// Emscripten/libc++ uses UTF-8 char paths instead.  Keep the payload format
-+	// native to each target and centralize the conversion so the panel remains
-+	// the upstream implementation on desktop while accepting browser paths.
-+	static void SetPathPayload(const char* type, const std::filesystem::path& path)
-+	{
-+#ifdef __EMSCRIPTEN__
-+		std::string encoded = path.generic_string();
-+		ImGui::SetDragDropPayload(type, encoded.c_str(), encoded.size() + 1);
-+#else
-+		std::wstring encoded = path.wstring();
-+		ImGui::SetDragDropPayload(type, encoded.c_str(), (encoded.size() + 1) * sizeof(wchar_t));
-+#endif
-+	}
-+
-+	static bool IsScenePath(const std::filesystem::path& path)
-+	{
-+		std::string extension = path.extension().string();
-+		std::transform(extension.begin(), extension.end(), extension.begin(),
-+			[](unsigned char c) { return (char)std::tolower(c); });
-+		return extension == ".tomcat" || extension == ".tcproj";
-+	}
-+
-+	static bool IsImagePath(const std::filesystem::path& path)
-+	{
-+		std::string extension = path.extension().string();
-+		std::transform(extension.begin(), extension.end(), extension.begin(),
-+			[](unsigned char c) { return (char)std::tolower(c); });
-+		return s_ImageExtensions.find(extension) != s_ImageExtensions.end();
-+	}
-+
- 	bool ShowMenu = false;
- 
- 	ImVec2 MenuPosi;
-@@ -410,20 +442,17 @@ namespace TomCat {
-             auto project = ProjectManager::Get().GetActiveProject();
-             std::filesystem::path assetPath = project ? project->GetAssetPath() : g_AssetPath;
-             auto relativePath = std::filesystem::relative(path, assetPath);
--            const wchar_t* itemPath = relativePath.c_str();
--
--            std::wstring ext = relativePath.extension().wstring();
- 
--            TC_Core_Assert(!ext.empty());
-+			TC_Core_Assert(!relativePath.extension().empty());
- 
--            if (ext == L".tomcat" || ext == L".tcproj")
-+			if (IsScenePath(relativePath))
-             {
--                ImGui::SetDragDropPayload("TOMCAT_SCENE", itemPath, (wcslen(itemPath) + 1) * sizeof(wchar_t));
-+                SetPathPayload("TOMCAT_SCENE", relativePath);
-                 ImGui::Image((ImTextureID)m_FileIcon->GetRendererID(), { 64, 64 }, { 0, 1 }, { 1, 0 });
-             }
--            else if (s_ImageExtensionsW.find(ext) != s_ImageExtensionsW.end())
-+			else if (IsImagePath(relativePath))
-             {
--                ImGui::SetDragDropPayload("SPRITE", itemPath, (wcslen(itemPath) + 1) * sizeof(wchar_t));
-+                SetPathPayload("SPRITE", relativePath);
-                 ImGui::Image((ImTextureID)m_ImageCache[path.string()]->GetRendererID(), { 64, 64 }, { 0, 1 }, { 1, 0 });
-             }
- 
-@@ -804,18 +833,16 @@ namespace TomCat {
- 
-                         if (ImGui::BeginDragDropSource())
-                         {
--                            const wchar_t* itemPath = relativePathItem.c_str();
--                            std::wstring extension = relativePathItem.extension().wstring();
--                            TC_Core_Assert(!extension.empty());
-+							TC_Core_Assert(!relativePathItem.extension().empty());
- 
--                            if (extension == L".tomcat" || extension == L".tcproj")
-+							if (IsScenePath(relativePathItem))
-                             {
--                                ImGui::SetDragDropPayload("TOMCAT_SCENE", itemPath, (wcslen(itemPath) + 1) * sizeof(wchar_t));
-+                                SetPathPayload("TOMCAT_SCENE", relativePathItem);
-                                 ImGui::Image((ImTextureID)m_FileIcon->GetRendererID(), { 64, 64 }, { 0, 1 }, { 1, 0 });
-                             }
--                            else if (s_ImageExtensionsW.find(extension) != s_ImageExtensionsW.end())
-+							else if (IsImagePath(relativePathItem))
-                             {
--                                ImGui::SetDragDropPayload("SPRITE", itemPath, (wcslen(itemPath) + 1) * sizeof(wchar_t));
-+                                SetPathPayload("SPRITE", relativePathItem);
-                                 ImGui::Image((ImTextureID)icon->GetRendererID(), { 64, 64 }, { 0, 1 }, { 1, 0 });
-                             }
- 
-@@ -832,7 +859,7 @@ namespace TomCat {
-                             }
-                         }
- 
--                        ImGui::TextWrapped(filenameString.c_str());
-+                        ImGui::TextWrapped("%s", filenameString.c_str());
-                         ImGui::NextColumn();
-                         ImGui::PopID();
-                     }
-diff --git a/Editor/TomCatInut/src/panels/SceneHierarchyPanel.cpp b/Editor/TomCatInut/src/panels/SceneHierarchyPanel.cpp
-index 628c6fe..ff064b4 100644
---- a/Editor/TomCatInut/src/panels/SceneHierarchyPanel.cpp
-+++ b/Editor/TomCatInut/src/panels/SceneHierarchyPanel.cpp
-@@ -5,6 +5,8 @@
- 
- #include <glm/gtc/type_ptr.hpp>
- 
-+#include <cstring>
-+
- #include "TomCat/Scene/Components.h"
- #include "TomCat/Project/ProjectManager.h"
- 
-@@ -14,6 +16,17 @@ namespace TomCat {
- 
- 	extern const std::filesystem::path g_AssetPath;
- 
-+	// Drag/drop paths are UTF-16 on Windows and UTF-8 on Emscripten.  The
-+	// browser backend uses the latter because libc++'s path value_type is char.
-+	static std::filesystem::path PathFromPayload(const ImGuiPayload* payload)
-+	{
-+#ifdef __EMSCRIPTEN__
-+		return std::filesystem::path(static_cast<const char*>(payload->Data));
-+#else
-+		return std::filesystem::path(static_cast<const wchar_t*>(payload->Data));
-+#endif
-+	}
-+
- 
- 	// 前向声明DrawProperty函数
- 	static void DrawProperty(const std::string& label, float columnWidth = 100.0f);
-@@ -87,22 +100,20 @@ namespace TomCat {
- 			ImGuiDragDropFlags flags = ImGuiDragDropFlags_AcceptNoDrawDefaultRect;
- 			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("TOMCAT_SCENE", flags))
- 			{
--				const wchar_t* path = (const wchar_t*)payload->Data;
- 				if (m_SceneLoadCallback)
- 				{
- 					auto project = ProjectManager::Get().GetActiveProject();
- 					std::filesystem::path assetPath = project ? project->GetAssetPath() : g_AssetPath;
--					m_SceneLoadCallback(assetPath / path);
-+					m_SceneLoadCallback(assetPath / PathFromPayload(payload));
- 				}
- 			}
- 			else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SPRITE", flags))
- 			{
--				const wchar_t* path = (const wchar_t*)payload->Data;
- 				if (m_SpriteCreateCallback)
- 				{
- 					auto project = ProjectManager::Get().GetActiveProject();
- 					std::filesystem::path assetPath = project ? project->GetAssetPath() : g_AssetPath;
--					m_SpriteCreateCallback(assetPath / path);
-+					m_SpriteCreateCallback(assetPath / PathFromPayload(payload));
- 				}
- 			}
- 			ImGui::EndDragDropTarget();
-@@ -352,7 +363,12 @@ static void DrawComponent(const std::string& name, Entity entity, UIFunction uiF
- 			// 安全复制 - 确保即使空字符串也能正确处理
- 			const std::string& source = (isEditing && editingEntity == entity) ? editBuffer : tag;
- 			if (!source.empty()) {
-+#ifdef _WIN32
- 				strncpy_s(buffer, sizeof(buffer), source.c_str(), _TRUNCATE);
-+#else
-+				std::strncpy(buffer, source.c_str(), sizeof(buffer) - 1);
-+				buffer[sizeof(buffer) - 1] = '\0';
-+#endif
- 			}
- 
- 			// 设置输入文本标志，允许空输入
-@@ -570,8 +586,7 @@ static void DrawComponent(const std::string& name, Entity entity, UIFunction uiF
- 				{
- 					auto project = ProjectManager::Get().GetActiveProject();
- 					std::filesystem::path assetPath = project ? project->GetAssetPath() : g_AssetPath;
--					const wchar_t* path = (const wchar_t*)payload->Data;
--					std::filesystem::path texturePath = assetPath / path;
-+					std::filesystem::path texturePath = assetPath / PathFromPayload(payload);
- 
- 					Ref<Texture2D> texture = Texture2D::Create(texturePath.string());
- 					if (texture->IsLoaded())
-diff --git a/TomCat/src/TomCat/ImGui/ImGuiLayer.cpp b/TomCat/src/TomCat/ImGui/ImGuiLayer.cpp
-index 7ba01ae..e1e44f4 100644
---- a/TomCat/src/TomCat/ImGui/ImGuiLayer.cpp
-+++ b/TomCat/src/TomCat/ImGui/ImGuiLayer.cpp
-@@ -8,7 +8,11 @@
- #include "TomCat/Core/Application.h"
- 
- #include <GLFW/glfw3.h>
-+#ifdef __EMSCRIPTEN__
-+#include <GLES3/gl3.h>
-+#else
- #include <Glad/glad.h>
-+#endif
- #include <filesystem>
- 
- #include"ImGuizmo.h"
-@@ -33,7 +37,13 @@ namespace TomCat {
- 		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;       // Enable Keyboard Controls
- 		//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
- 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;           // Enable Docking
-+		// WebGL canvases have one browser-owned platform window; Emscripten's
-+		// GLFW backend does not implement Dear ImGui's native multi-viewport
-+		// platform callbacks.  Docking itself remains enabled so the editor
-+		// layout matches the desktop build.
-+#ifndef __EMSCRIPTEN__
- 		io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;         // Enable Multi-Viewport / Platform Windows
-+#endif
- 		// Disable ImGui's automatic .ini save so custom sections we append to imgui.ini
- 		// (e.g. [ContentBrowser] layout) are never overwritten. Window layouts are saved
- 		// explicitly by the Editor (project folder imgui.ini).
-@@ -84,8 +94,16 @@ namespace TomCat {
- 				0
- 			};
- 
-+#ifdef __EMSCRIPTEN__
-+			// Browser builds only see files mounted in Emscripten's virtual
-+			// filesystem.  Keep the fallback on a packaged font instead of probing
-+			// the host's Windows font directory (which is unavailable in WASM).
-+			const char* cnFontPath = "Packages/fonts/opensans/OpenSans-Regular.ttf";
-+			const char* symFontPath = "Packages/fonts/opensans/OpenSans-Regular.ttf";
-+#else
- 			const char* cnFontPath = "C:/Windows/Fonts/simhei.ttf";
- 			const char* symFontPath = "C:/Windows/Fonts/seguisym.ttf";
-+#endif
- 
- 			ImFontConfig mergeCfg;
- 			mergeCfg.MergeMode = true;
-@@ -120,12 +138,23 @@ namespace TomCat {
- 
- 		SetDarkThemeColors();
- 
-+		GLFWwindow* window = nullptr;
-+#ifdef __EMSCRIPTEN__
-+		window = glfwGetCurrentContext();
-+#else
- 		Application& app = Application::Get();
--		GLFWwindow* window = static_cast<GLFWwindow*>(app.GetWindow().GetNativeWindow());
-+		window = static_cast<GLFWwindow*>(app.GetWindow().GetNativeWindow());
-+#endif
- 
- 		// Setup Platform/Renderer bindings
- 		ImGui_ImplGlfw_InitForOpenGL(window, true);
--		ImGui_ImplOpenGL3_Init("#version 410");
-+		ImGui_ImplOpenGL3_Init(
-+#ifdef __EMSCRIPTEN__
-+			"#version 300 es"
-+#else
-+			"#version 410"
-+#endif
-+		);
- 	}
- 
- 	void ImGuiLayer::OnDetach()
-@@ -165,8 +194,10 @@ namespace TomCat {
- 		TC_PROFILE_FUNCTION();
- 
- 		ImGuiIO& io = ImGui::GetIO();
-+#ifndef __EMSCRIPTEN__
- 		Application& app = Application::Get();
- 		io.DisplaySize = ImVec2((float)app.GetWindow().GetWidth(), (float)app.GetWindow().GetHeight());
-+#endif
- 
- 		// Rendering
- 		ImGui::Render();
-diff --git a/TomCat/src/platform/OpenGL/OpenGLFramebuffer.cpp b/TomCat/src/platform/OpenGL/OpenGLFramebuffer.cpp
-index 0bc7f28..395c244 100644
---- a/TomCat/src/platform/OpenGL/OpenGLFramebuffer.cpp
-+++ b/TomCat/src/platform/OpenGL/OpenGLFramebuffer.cpp
-@@ -1,7 +1,11 @@
- #include "tcpch.h"
- #include "OpenGLFramebuffer.h"
- 
--#include<glad/glad.h>
-+#ifdef __EMSCRIPTEN__
-+#include <GLES3/gl3.h>
-+#else
-+#include <glad/glad.h>
-+#endif
- 
- namespace TomCat {
- 
-@@ -16,7 +20,13 @@ namespace TomCat {
- 
- 		static void CreateTextures(bool multisampled, uint32_t* outID, uint32_t count)
- 		{
-+		#ifdef __EMSCRIPTEN__
-+			// GLES3/WebGL2 does not expose the desktop DSA texture creation
-+			// entry points used by the native renderer.
-+			glGenTextures((GLsizei)count, outID);
-+		#else
- 			glCreateTextures(TextureTarget(multisampled), count, outID);
-+		#endif
- 		}
- 
- 		static void BindTexture(bool multisampled, uint32_t id)
-@@ -27,16 +37,25 @@ namespace TomCat {
- 		static void AttachColorTexture(uint32_t id, int samples, GLenum internalFormat, GLenum format, uint32_t width, uint32_t height, int index)
- 		{
- 			bool multisampled = samples > 1;
-+		#ifdef __EMSCRIPTEN__
-+			// WebGL2 has no multisample texture path.  The web editor requests a
-+			// single sample framebuffer, so keep the branch explicit and fail
-+			// softly if a project asks for MSAA.
-+			if (multisampled)
-+				multisampled = false;
-+		#endif
- 			if (multisampled)
- 			{
- 				glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, internalFormat, width, height, GL_FALSE);
- 			}
- 			else
- 			{
--				glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, GL_UNSIGNED_BYTE, nullptr);
-+				GLenum type = format == GL_RED_INTEGER ? GL_INT : GL_UNSIGNED_BYTE;
-+				glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, nullptr);
- 
--				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
--				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-+				const GLint filter = format == GL_RED_INTEGER ? GL_NEAREST : GL_LINEAR;
-+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
-+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
- 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
- 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
- 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-@@ -48,16 +67,25 @@ namespace TomCat {
- 		static void AttachDepthTexture(uint32_t id, int samples, GLenum format, GLenum attachmentType, uint32_t width, uint32_t height)
- 		{
- 			bool multisampled = samples > 1;
-+		#ifdef __EMSCRIPTEN__
-+			if (multisampled)
-+				multisampled = false;
-+		#endif
- 			if (multisampled)
- 			{
- 				glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, format, width, height, GL_FALSE);
- 			}
- 			else
- 			{
-+			#ifdef __EMSCRIPTEN__
-+				glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0,
-+					GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
-+			#else
- 				glTexStorage2D(GL_TEXTURE_2D, 1, format, width, height);
-+			#endif
- 
--				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
--				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
- 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
- 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
- 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-@@ -123,10 +151,19 @@ namespace TomCat {
- 			m_DepthAttachment = 0;
- 		}
- 
-+		#ifdef __EMSCRIPTEN__
-+		glGenFramebuffers(1, &m_RendererID);
-+		#else
- 		glCreateFramebuffers(1, &m_RendererID);
-+		#endif
- 		glBindFramebuffer(GL_FRAMEBUFFER, m_RendererID);
- 
- 		bool multisample = m_Specification.Samples > 1;
-+#ifdef __EMSCRIPTEN__
-+		// WebGL2 exposes multisample renderbuffers, but not the texture target
-+		// used by this framebuffer class.  Use a regular 2D texture consistently.
-+		multisample = false;
-+#endif
- 
- 		// Attachments
- 		if (m_ColorAttachmentSpecifications.size())
-@@ -170,7 +207,11 @@ namespace TomCat {
- 		else if (m_ColorAttachments.empty())
- 		{
- 			// Only depth-pass
-+		#ifdef __EMSCRIPTEN__
-+			glDrawBuffers(0, nullptr);
-+		#else
- 			glDrawBuffer(GL_NONE);
-+		#endif
- 		}
- 
- 		TC_Core_Assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE, "Framebuffer is incomplete!");
-@@ -212,8 +253,18 @@ namespace TomCat {
- 	{
- 		TC_Core_Assert(attachmentIndex < m_ColorAttachments.size());
- 
-+	#ifdef __EMSCRIPTEN__
-+		// glClearTexImage is desktop GL 4.4.  Clear the attached integer
-+		// target through the GLES3 framebuffer API instead.
-+		GLint previous = 0;
-+		glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previous);
-+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_RendererID);
-+		glClearBufferiv(GL_COLOR, (GLint)attachmentIndex, &value);
-+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)previous);
-+	#else
- 		auto& spec = m_ColorAttachmentSpecifications[attachmentIndex];
- 		glClearTexImage(m_ColorAttachments[attachmentIndex], 0,
- 			Utils::TomCatFBTextureFormatToGL(spec.TextureFormat), GL_INT, &value);
-+	#endif
- 	}
- }

@@ -141,14 +141,17 @@ if(TOMCAT_WEB_EMSCRIPTEN)
   # panels are intentionally kept as direct source references so an upstream
   # update cannot silently replace them with a parallel UI implementation.
   set(TC_EDITOR_SRC "${TC_ENGINE}/Editor/TomCatInut/src")
+  set(TC_MANAGER_SRC "${TC_ENGINE}/Builder/Manager/src")
 
   add_library(tomcat_editor STATIC
     "${TC_EDITOR_SRC}/EditorLayer.cpp"
     "${TC_EDITOR_SRC}/panels/ContentBrowserPanel.cpp"
     "${TC_EDITOR_SRC}/panels/SceneHierarchyPanel.cpp"
+    "${TC_MANAGER_SRC}/ExampleLayer.cpp"
     "${TC_ENGINE}/TomCat/vendor/ImGuizmo/ImGuizmo.cpp")
   target_include_directories(tomcat_editor PUBLIC
     "${TC_EDITOR_SRC}"
+    "${TC_MANAGER_SRC}"
     "${TC_ENGINE_SRC}"
     "${TC_ENGINE}/TomCat/vendor"
     "${TC_ENGINE}/TomCat/vendor/spdlog/include"
@@ -199,11 +202,14 @@ if(TOMCAT_WEB_EMSCRIPTEN)
 
   # A no-entry module exposes both the existing C ABI bridge and the engine
   # runtime entry points.  Shaders and fonts travel as a .data payload.
-  add_executable(tomcat_web_module src/tomcat_web_runtime.cpp)
+  add_executable(tomcat_web_module
+    src/tomcat_web_runtime.cpp
+    src/tomcat_web_hub.cpp)
   target_include_directories(tomcat_web_module PRIVATE
     include
     "${TC_ENGINE_SRC}"
-    "${TC_EDITOR_SRC}")
+    "${TC_EDITOR_SRC}"
+    "${TC_MANAGER_SRC}")
   target_compile_definitions(tomcat_web_module PRIVATE
     TC_PLATFORM_WEB=1
     TC_BUILD_WEB=1
@@ -226,8 +232,8 @@ if(TOMCAT_WEB_EMSCRIPTEN)
     "SHELL:-sUSE_GLFW=3"
     "SHELL:-sFORCE_FILESYSTEM=1"
     "SHELL:-lidbfs.js"
-    "SHELL:-sEXPORTED_FUNCTIONS=['_tc_web_set_event_callback','_tc_web_boot','_tc_web_shutdown','_tc_web_frame','_tc_web_push_event','_tc_web_poll_event','_tc_web_dispatch','_tc_web_runtime_set_project_path','_tc_web_runtime_boot','_tc_web_runtime_frame','_tc_web_runtime_shutdown','_tc_web_runtime_set_file_dialog_result','_tc_web_editor_new_scene','_tc_web_editor_open_scene','_tc_web_editor_save_scene','_tc_web_editor_set_project','_tc_web_editor_play','_tc_web_editor_stop','_tc_web_platform_set_size','_tc_web_platform_resize','_tc_web_set_file_dialog_result','_tc_web_storage_mount','_tc_web_storage_sync','_tc_web_storage_sync_pending','_tc_web_storage_sync_last_ok','_tc_web_storage_last_error','_tc_web_storage_exists','_tc_web_storage_mkdir','_tc_web_storage_remove','_tc_web_storage_size','_tc_web_storage_read','_tc_web_storage_write','_tc_web_storage_read_text','_tc_web_storage_write_text','_tc_web_storage_list','_tc_web_project_create','_tc_web_project_save','_tc_web_project_load','_tc_web_project_remove','_tc_web_scene_save','_tc_web_scene_load','_tc_web_scene_remove','_tc_web_storage_sync_complete','_malloc','_free']"
-    "SHELL:-sEXPORTED_RUNTIME_METHODS=['ccall','UTF8ToString','addFunction','removeFunction','HEAPU8']"
+    "SHELL:-sEXPORTED_FUNCTIONS=['_tc_web_set_event_callback','_tc_web_boot','_tc_web_shutdown','_tc_web_frame','_tc_web_push_event','_tc_web_poll_event','_tc_web_dispatch','_tc_web_runtime_set_project_path','_tc_web_runtime_boot','_tc_web_runtime_frame','_tc_web_runtime_shutdown','_tc_web_runtime_set_file_dialog_result','_tc_web_editor_new_scene','_tc_web_editor_open_scene','_tc_web_editor_save_scene','_tc_web_editor_set_project','_tc_web_editor_play','_tc_web_editor_stop','_tc_web_hub_boot','_tc_web_hub_frame','_tc_web_hub_shutdown','_tc_web_hub_rescan','_tc_web_hub_poll_open_project','_tc_web_platform_set_size','_tc_web_platform_resize','_tc_web_set_file_dialog_result','_tc_web_storage_mount','_tc_web_storage_sync','_tc_web_storage_sync_pending','_tc_web_storage_sync_last_ok','_tc_web_storage_last_error','_tc_web_storage_exists','_tc_web_storage_mkdir','_tc_web_storage_remove','_tc_web_storage_size','_tc_web_storage_read','_tc_web_storage_write','_tc_web_storage_read_text','_tc_web_storage_write_text','_tc_web_storage_list','_tc_web_project_create','_tc_web_project_save','_tc_web_project_load','_tc_web_project_remove','_tc_web_scene_save','_tc_web_scene_load','_tc_web_scene_remove','_tc_web_storage_sync_complete','_malloc','_free']"
+    "SHELL:-sEXPORTED_RUNTIME_METHODS=['ccall','UTF8ToString','addFunction','removeFunction','HEAPU8','FS']"
     "--preload-file=${TC_ASSETS_DIR}/Packages@/Packages"
     "-sUSE_GLFW=3")
 endif()
