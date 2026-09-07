@@ -24,6 +24,8 @@ python -m http.server 8080 --directory wasm/public
 
 打开 `http://localhost:8080/`，默认进入 Hub。
 
+Hub 的“打开编辑器”会进入上游 EditorLayer 的 WebAssembly 运行页，并把项目 ID 作为查询参数传递到浏览器虚拟文件系统。没有 WASM 产物时，可用 `editor/?shell=1` 打开纯浏览器管理外壳；外壳仍支持项目、场景、实体和资源的本地编辑。
+
 ## 拉取上游引擎
 
 ```powershell

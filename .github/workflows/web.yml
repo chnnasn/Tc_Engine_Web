@@ -17,7 +17,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node --test bridge/tomcat-bridge.test.mjs
+      - run: node --test bridge/*.test.mjs
 
   build-wasm:
     runs-on: ubuntu-latest
@@ -33,7 +33,7 @@ jobs:
       - name: Smoke test module exports
         run: |
           cd build/wasm
-          node -e "const f=require('./tomcat_web_module.js'); f({locateFile:p=>'./'+p}).then(m=>{for(const n of ['_tc_web_runtime_boot','_tc_web_runtime_frame','_tc_web_runtime_shutdown','_tc_web_boot']) if(typeof m[n]!=='function') throw new Error('missing export '+n); console.log('module exports ok');}).catch(e=>{console.error(e);process.exit(1)})"
+          node -e "const f=require('./tomcat_web_module.js'); f({locateFile:p=>'./'+p,noInitialRun:true}).then(m=>{for(const n of ['_tc_web_runtime_boot','_tc_web_runtime_frame','_tc_web_runtime_shutdown','_tc_web_boot','_tc_web_platform_resize','_tc_web_storage_mount','_tc_web_storage_sync','_tc_web_project_create','_tc_web_scene_save']) if(typeof m[n]!=='function') throw new Error('missing export '+n); if(!m.HEAPU8) throw new Error('HEAPU8 runtime export missing'); console.log('module exports ok');}).catch(e=>{console.error(e);process.exit(1)})"
       - name: Assemble site
         run: |
           mkdir -p dist/runtime

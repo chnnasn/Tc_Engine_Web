@@ -6,6 +6,11 @@ wasm/build-*/
 *.o
 *.obj
 *.wasm
+build_wasm*.log
+
+# Emscripten artifacts are assembled by the CI pipeline (see .github/workflows)
+wasm/public/runtime/tomcat_web_module.js
+wasm/public/runtime/tomcat_web_module.data
 
 # Local configuration
 .env

@@ -1,158 +1,154 @@
+// Web entry point for the upstream TomCat editor.
+//
+// The desktop executable enters through EntryPoint/Application::Run.  A
+// browser owns the animation loop, so this file drives the same Application,
+// ImGuiLayer and EditorLayer one frame at a time while keeping all editor UI,
+// scene panels and renderer code in the upstream sources.
+
 #include "tomcat_web.hpp"
 
-#include <GLFW/glfw3.h>
-
-#include "TomCat/Core/Base.h"
+#include "TomCat/Core/Application.h"
 #include "TomCat/Core/Log.h"
-#include "TomCat/Core/Timestep.h"
-#include "TomCat/Renderer/RenderCommand.h"
-#include "TomCat/Renderer/Renderer.h"
-#include "TomCat/Scene/Components.h"
-#include "TomCat/Scene/Entity.h"
-#include "TomCat/Scene/Scene.h"
+#include "TomCat/Core/TimeStep.h"
+#include "TomCat/Project/ProjectManager.h"
 
-#include "imgui.h"
-#include "backends/imgui_impl_glfw.h"
-#include "backends/imgui_impl_opengl3.h"
+#include "EditorLayer.h"
+
+#include <algorithm>
+#include <string>
+
+extern "C" {
+void tc_web_platform_set_size(int width, int height);
+void tc_web_set_file_dialog_result(const char* path);
+}
 
 namespace {
 
-TomCat::Scene* g_scene = nullptr;
-GLFWwindow* g_window = nullptr;
+TomCat::Application* g_application = nullptr;
+TomCat::EditorLayer* g_editorLayer = nullptr;
+std::string g_projectPath;
+std::string g_argument0 = "TomCatWebEditor";
 bool g_running = false;
-uint32_t g_width = 1280;
-uint32_t g_height = 720;
-
-void BuildDemoScene(TomCat::Scene& scene)
-{
-	using namespace TomCat;
-
-	// Primary orthographic camera.  Sprite rendering is Y-up; place the
-	// camera at the origin so Scene::OnRenderRuntime() draws with its own
-	// projection matrix.
-	Entity camera = scene.CreateEntity("Main Camera");
-	camera.GetComponent<Transform>()._Translation = glm::vec3(0.0f, 0.0f, 0.0f);
-	auto& cameraComponent = camera.AddComponent<C_Camera>();
-	cameraComponent._Camera.SetOrthographic(5.0f, -1.0f, 1.0f);
-	cameraComponent._Camera.SetViewportSize(g_width, g_height);
-	cameraComponent.Primary = true;
-
-	// Static floor.
-	Entity ground = scene.CreateEntity("Ground");
-	ground.GetComponent<Transform>()._Translation = glm::vec3(0.0f, -2.0f, 0.0f);
-	ground.GetComponent<Transform>()._Scale = glm::vec3(8.0f, 1.0f, 1.0f);
-	ground.AddComponent<SpriteRenderer>(glm::vec4(0.25f, 0.35f, 0.45f, 1.0f));
-	ground.AddComponent<Rigidbody2D>();
-	auto& groundCollider = ground.AddComponent<BoxCollider2D>();
-	groundCollider.Size = glm::vec2(4.0f, 0.5f);
-
-	// Dynamic sprite that will live in the Box2D world.
-	Entity box = scene.CreateEntity("Player");
-	box.GetComponent<Transform>()._Translation = glm::vec3(0.0f, 0.0f, 0.0f);
-	box.GetComponent<Transform>()._Scale = glm::vec3(0.5f, 0.5f, 1.0f);
-	box.AddComponent<SpriteRenderer>(glm::vec4(0.95f, 0.55f, 0.25f, 1.0f));
-	auto& rigidbody = box.AddComponent<Rigidbody2D>();
-	rigidbody.Type = Rigidbody2D::BodyType::Dynamic;
-	rigidbody.FixedRotation = true;
-	auto& boxCollider = box.AddComponent<BoxCollider2D>();
-	boxCollider.Size = glm::vec2(0.25f, 0.25f);
-}
 
 } // namespace
 
 extern "C" {
 
-int tc_web_runtime_boot(int width, int height)
-{
-	TomCat::Log::Init();
-
-	if (!glfwInit())
-		return -1;
-
-	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-	g_window = glfwCreateWindow(width > 0 ? width : (int)g_width,
-		height > 0 ? height : (int)g_height, "TomCat Engine", nullptr, nullptr);
-	if (!g_window)
-		return -2;
-
-	g_width = width > 0 ? (uint32_t)width : g_width;
-	g_height = height > 0 ? (uint32_t)height : g_height;
-	glfwMakeContextCurrent(g_window);
-	glfwSwapInterval(1);
-
-	TomCat::Renderer::Init();
-
-	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
-	ImGuiIO& io = ImGui::GetIO();
-	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-	io.Fonts->AddFontFromFileTTF("/Packages/fonts/opensans/OpenSans-Regular.ttf", 18.0f);
-	ImGui::StyleColorsDark();
-	ImGui_ImplGlfw_InitForOpenGL(g_window, true);
-	ImGui_ImplOpenGL3_Init("#version 300 es");
-	TC_Core_Info("Dear ImGui {0} initialized for WebGL2", ImGui::GetVersion());
-
-	g_scene = new TomCat::Scene();
-	g_scene->OnViewportResize(g_width, g_height);
-	BuildDemoScene(*g_scene);
-	g_scene->OnRuntimeStart();
-	g_running = true;
-
-	TomCatWeb::Bridge::instance().boot();
-	return 0;
+// Set before boot to load a project from the browser's virtual filesystem.
+void tc_web_runtime_set_project_path(const char* path) {
+  g_projectPath = path ? path : "";
 }
 
-void tc_web_runtime_frame(double seconds)
-{
-	glfwPollEvents();
-	if (!g_running || !g_scene)
-		return;
+int tc_web_runtime_boot(int width, int height) {
+  if (g_running)
+    return 0;
 
-	g_scene->OnUpdateRuntime(TomCat::Timestep((float)seconds));
-	g_scene->OnRenderRuntime();
+  tc_web_platform_set_size(width, height);
+  TomCat::Log::Init();
 
-	ImGui_ImplOpenGL3_NewFrame();
-	ImGui_ImplGlfw_NewFrame();
-	ImGui::NewFrame();
-	{
-		ImGui::Begin("TomCat Engine");
-		ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
-		ImGui::Separator();
-		ImGui::Text("Runtime: WebGL2 / Emscripten GLFW");
-		ImGui::Text("Viewport: %u x %u", g_width, g_height);
-		ImGui::Text("Rendering scene: %s", g_scene ? "running" : "stopped");
-		ImGui::TextDisabled("Engine sources: Scene / Renderer2D / Box2D");
-		ImGui::End();
-	}
-	ImGui::Render();
-	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+  // ProjectManager is the same upstream manager used by the desktop Hub.  A
+  // path supplied by Hub/IndexedDB is loaded before constructing EditorLayer
+  // so its panels see the active project in their constructors.
+  if (!g_projectPath.empty()) {
+    auto project = TomCat::ProjectManager::Get().LoadProject(g_projectPath);
+    if (project)
+      TomCat::ProjectManager::Get().SetActiveProject(project);
+  }
 
-	glfwSwapBuffers(g_window);
+  char* argv[] = { const_cast<char*>(g_argument0.c_str()), nullptr };
+  TomCat::ApplicationCommandLineArgs args{ 1, argv };
+  g_application = new TomCat::Application("TomCat Editor", "", args);
+  if (!g_application)
+    return -1;
 
-	TomCatWeb::Bridge::instance().frame(seconds);
+  g_editorLayer = new TomCat::EditorLayer();
+  g_application->PushLayer(g_editorLayer);
+
+  // A first visit should be useful even when no project has been imported.
+  // The helper creates the same camera/scene primitives used by the editor's
+  // normal new-project flow; imported projects bypass it.
+  if (g_projectPath.empty())
+    g_editorLayer->WebInitializeDemoScene();
+
+  g_running = true;
+  TomCatWeb::Bridge::instance().boot();
+  return 0;
 }
 
-void tc_web_runtime_shutdown()
-{
-	g_running = false;
-	if (g_scene)
-	{
-		g_scene->OnRuntimeStop();
-		delete g_scene;
-		g_scene = nullptr;
-	}
+void tc_web_runtime_frame(double seconds) {
+  if (!g_running || !g_application || !g_editorLayer)
+    return;
 
-	TomCat::Renderer::Shutdown();
-	ImGui_ImplOpenGL3_Shutdown();
-	ImGui_ImplGlfw_Shutdown();
-	ImGui::DestroyContext();
-	if (g_window)
-	{
-		glfwDestroyWindow(g_window);
-		g_window = nullptr;
-	}
-	glfwTerminate();
-	TomCatWeb::Bridge::instance().shutdown();
+  const float delta = static_cast<float>(std::clamp(seconds, 0.0, 0.1));
+  g_editorLayer->OnUpdate(TomCat::Timestep(delta));
+
+  TomCat::ImGuiLayer* imgui = g_application->GetImGuiLayer();
+  imgui->Begin();
+  g_editorLayer->OnImGuiRender();
+  imgui->End();
+
+  // WebWindow performs GLFW event polling and swaps the WebGL backbuffer.
+  g_application->GetWindow().OnUpdate();
+  TomCatWeb::Bridge::instance().frame(seconds);
+}
+
+void tc_web_runtime_shutdown() {
+  if (!g_running && !g_application)
+    return;
+
+  g_running = false;
+  g_editorLayer = nullptr;
+  delete g_application;
+  g_application = nullptr;
+  TomCatWeb::Bridge::instance().shutdown();
+}
+
+// Editor controls used by Hub/Editor's browser shell.  They call the same
+// public Web forwarding methods on upstream EditorLayer as the ImGui menu.
+int tc_web_editor_new_scene() {
+  if (!g_editorLayer)
+    return -1;
+  g_editorLayer->WebInitializeDemoScene();
+  return 0;
+}
+
+int tc_web_editor_open_scene(const char* path) {
+  if (!g_editorLayer || !path)
+    return -1;
+  return g_editorLayer->WebLoadScene(path) ? 0 : -2;
+}
+
+int tc_web_editor_save_scene(const char* path) {
+  if (!g_editorLayer || !path)
+    return -1;
+  return g_editorLayer->WebSaveScene(path) ? 0 : -2;
+}
+
+int tc_web_editor_set_project(const char* path) {
+  if (!g_editorLayer || !path)
+    return -1;
+  auto project = TomCat::ProjectManager::Get().LoadProject(path);
+  if (!project)
+    return -2;
+  g_editorLayer->WebSetProject(project);
+  return 0;
+}
+
+void tc_web_editor_play() {
+  if (g_editorLayer)
+    g_editorLayer->WebPlay();
+}
+
+void tc_web_editor_stop() {
+  if (g_editorLayer)
+    g_editorLayer->WebStop();
+}
+
+// Browser file-picker callbacks can place a selected virtual path here.  The
+// next upstream FileDialogs call consumes it, preserving the synchronous API
+// expected by EditorLayer while the picker itself remains asynchronous.
+void tc_web_runtime_set_file_dialog_result(const char* path) {
+  tc_web_set_file_dialog_result(path);
 }
 
 } // extern "C"

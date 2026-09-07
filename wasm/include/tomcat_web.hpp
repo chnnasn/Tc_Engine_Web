@@ -66,6 +66,21 @@ void tc_web_frame(double delta_seconds);
 void tc_web_push_event(const char* json);
 const char* tc_web_poll_event();
 void tc_web_dispatch(const char* feature, const char* payload);
+
+// Browser-hosted upstream editor lifecycle and control surface.
+void tc_web_runtime_set_project_path(const char* path);
+int tc_web_runtime_boot(int width, int height);
+void tc_web_runtime_frame(double seconds);
+void tc_web_runtime_shutdown();
+void tc_web_runtime_set_file_dialog_result(const char* path);
+void tc_web_platform_set_size(int width, int height);
+void tc_web_platform_resize(int width, int height);
+int tc_web_editor_new_scene();
+int tc_web_editor_open_scene(const char* path);
+int tc_web_editor_save_scene(const char* path);
+int tc_web_editor_set_project(const char* path);
+void tc_web_editor_play();
+void tc_web_editor_stop();
 }
 
 

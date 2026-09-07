@@ -76,8 +76,12 @@ def main() -> None:
         # The Web runtime is the upstream engine compiled as-is after a
         # deterministic Web port patch is applied.  The patch is checked
         # against the pinned parent commit; drift fails the build loudly.
-        run("git", "apply", "--check", str(web_patch), cwd=destination)
-        run("git", "apply", str(web_patch), cwd=destination)
+        # A Windows checkout may materialize the upstream LF files as CRLF
+        # when core.autocrlf=true.  The Web patch changes source semantics,
+        # and should still validate against that checkout; ignore only line
+        # ending/whitespace differences while retaining normal context checks.
+        run("git", "apply", "--check", "--ignore-whitespace", str(web_patch), cwd=destination)
+        run("git", "apply", "--ignore-whitespace", str(web_patch), cwd=destination)
         print(f"Applied Web port patch {web_patch.name}")
     print(f"TomCat_Engine branch '{lock['branch']}' updated in {destination}")
 
