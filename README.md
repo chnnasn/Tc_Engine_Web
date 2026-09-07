@@ -44,7 +44,7 @@ cmake --build build/wasm --config Release
 
 流水线执行相同流程，并上传包含 Hub、Editor 和 WASM 模块的静态站点产物。
 
-`build/wasm/tomcat_web_module.js`、`.wasm` 与 `.data` 是真正由上游引擎源码编译链接出来的产物：`tomcat_engine_core` 直接编译 `TomCat/src` 中的 Scene、Renderer、Project、Core 代码，链接上游 Box2D 与 yaml-cpp 的静态库；`.data` 预加载上游 Editor 的 `Packages` 资源（含 `Texture.glsl`），引擎入口 `tc_web_runtime_*` 负责初始化场景、Box2D 世界并驱动每帧渲染。
+`build/wasm/tomcat_web_module.js`、`.wasm` 与 `.data` 是真正由上游引擎源码编译链接出来的产物：`tomcat_engine_core` 直接编译 `TomCat/src` 中的 Scene、Renderer、Project、Core 代码，链接上游 Box2D 与 yaml-cpp 的静态库；`tomcat_imgui` 编译上游 Dear ImGui 及 GLFW/OpenGL3 后端。`.data` 预加载上游 Editor 的 `Packages` 资源（含 `Texture.glsl`），引擎入口 `tc_web_runtime_*` 负责初始化场景、Box2D 世界，逐帧渲染并把 ImGui 界面叠加到画布上。
 
 流水线支持三种更新入口：Web 仓库提交、每小时检查上游 `main`、以及 `repository_dispatch` 事件。上游仓库更新后，可以发送 `tomcat-engine-updated` 事件立即触发同步；没有配置事件转发时，定时任务仍会自动拉取最新分支。
 

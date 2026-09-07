@@ -243,10 +243,10 @@ index 0bf0f18..3b82f61 100644
 \ No newline at end of file
 +}
 diff --git a/TomCat/src/platform/OpenGL/OpenGLShader.cpp b/TomCat/src/platform/OpenGL/OpenGLShader.cpp
-index eccf203..5b8b2ee 100644
+index eccf203..a0385a1 100644
 --- a/TomCat/src/platform/OpenGL/OpenGLShader.cpp
 +++ b/TomCat/src/platform/OpenGL/OpenGLShader.cpp
-@@ -1,112 +1,70 @@
+@@ -1,113 +1,75 @@
  #include "tcpch.h"
  #include "Platform/OpenGL/OpenGLShader.h"
  
@@ -259,16 +259,20 @@ index eccf203..5b8b2ee 100644
  
 +#include <fstream>
  #include <glm/gtc/type_ptr.hpp>
-+#include <sstream>
- 
+-
 -#include <shaderc/shaderc.hpp>
 -#include <spirv_cross/spirv_cross.hpp>
 -#include <spirv_cross/spirv_glsl.hpp>
 -
 -#include <filesystem>
-+namespace TomCat {
- 
+-
 -#include "TomCat/Core/Timer.h"
++#include <sstream>
++#include <cstdlib>
+ 
+ namespace TomCat {
+ 
+-	namespace Utils {
 +	static GLenum ShaderTypeFromString(const std::string& type)
 +	{
 +		if (type == "vertex")
@@ -276,30 +280,22 @@ index eccf203..5b8b2ee 100644
 +		if (type == "fragment" || type == "pixel")
 +			return GL_FRAGMENT_SHADER;
  
--namespace TomCat {
-+		TC_Core_Assert(false, "Unknown shader type!");
-+		return 0;
-+	}
- 
- 	namespace Utils {
-+		static const char* GetCacheDirectory() { return "Packages/cache/shader/opengl"; }
-+	}
- 
 -		static GLenum ShaderTypeFromString(const std::string& type)
 -		{
 -			if (type == "vertex")
 -				return GL_VERTEX_SHADER;
 -			if (type == "fragment" || type == "pixel")
 -				return GL_FRAGMENT_SHADER;
-+	OpenGLShader::OpenGLShader(const std::string& filepath)
-+		: m_FilePath(filepath)
-+	{
-+		TC_PROFILE_FUNCTION();
++		TC_Core_Assert(false, "Unknown shader type!");
++		return 0;
++	}
  
 -			TC_Core_Assert(false, "Unknown shader type!");
 -			return 0;
 -		}
-+		std::string source = ReadFile(filepath);
++	namespace Utils {
++		static const char* GetCacheDirectory() { return "Packages/cache/shader/opengl"; }
++	}
  
 -		static shaderc_shader_kind GLShaderStageToShaderC(GLenum stage)
 -		{
@@ -311,20 +307,51 @@ index eccf203..5b8b2ee 100644
 -			TC_Core_Assert(false);
 -			return (shaderc_shader_kind)0;
 -		}
++	OpenGLShader::OpenGLShader(const std::string& filepath)
++		: m_FilePath(filepath)
++	{
++		TC_PROFILE_FUNCTION();
+ 
+-		static const char* GLShaderStageToString(GLenum stage)
+-		{
+-			switch (stage)
+-			{
+-			case GL_VERTEX_SHADER:   return "GL_VERTEX_SHADER";
+-			case GL_FRAGMENT_SHADER: return "GL_FRAGMENT_SHADER";
+-			}
+-			TC_Core_Assert(false);
+-			return nullptr;
+-		}
++		std::string source = ReadFile(filepath);
+ 
+-		static const char* GetCacheDirectory()
+-		{
+-			// TODO: make sure the assets directory is valid
+-			return "Packages/cache/shader/opengl";
+-		}
 +		std::string vertexSource;
 +		std::string fragmentSource;
 +		std::istringstream stream(source);
 +		std::string line;
 +		GLenum currentType = 0;
  
--		static const char* GLShaderStageToString(GLenum stage)
+-		static void CreateCacheDirectoryIfNeeded()
 +		while (std::getline(stream, line))
  		{
+-			std::string cacheDirectory = GetCacheDirectory();
+-			if (!std::filesystem::exists(cacheDirectory))
+-				std::filesystem::create_directories(cacheDirectory);
+-		}
++			if (!line.empty() && line.back() == '\r')
++				line.pop_back();
+ 
+-		static const char* GLShaderStageCachedOpenGLFileExtension(uint32_t stage)
+-		{
 -			switch (stage)
 +			if (line.find("#type") == 0)
  			{
--			case GL_VERTEX_SHADER:   return "GL_VERTEX_SHADER";
--			case GL_FRAGMENT_SHADER: return "GL_FRAGMENT_SHADER";
+-			case GL_VERTEX_SHADER:    return ".cached_opengl.vert";
+-			case GL_FRAGMENT_SHADER:  return ".cached_opengl.frag";
 +				std::string typeName = line.substr(6);
 +				while (!typeName.empty() && (typeName.back() == '\r' || typeName.back() == ' ' || typeName.back() == '\t'))
 +					typeName.pop_back();
@@ -332,40 +359,11 @@ index eccf203..5b8b2ee 100644
 +				continue;
  			}
 -			TC_Core_Assert(false);
--			return nullptr;
--		}
--
--		static const char* GetCacheDirectory()
--		{
--			// TODO: make sure the assets directory is valid
--			return "Packages/cache/shader/opengl";
--		}
--
--		static void CreateCacheDirectoryIfNeeded()
--		{
--			std::string cacheDirectory = GetCacheDirectory();
--			if (!std::filesystem::exists(cacheDirectory))
--				std::filesystem::create_directories(cacheDirectory);
--		}
- 
--		static const char* GLShaderStageCachedOpenGLFileExtension(uint32_t stage)
--		{
--			switch (stage)
--			{
--			case GL_VERTEX_SHADER:    return ".cached_opengl.vert";
--			case GL_FRAGMENT_SHADER:  return ".cached_opengl.frag";
--			}
--			TC_Core_Assert(false);
 -			return "";
-+			if (currentType == GL_VERTEX_SHADER)
-+				vertexSource += line + "\n";
-+			else if (currentType == GL_FRAGMENT_SHADER)
-+				fragmentSource += line + "\n";
- 		}
+-		}
  
 -		static const char* GLShaderStageCachedVulkanFileExtension(uint32_t stage)
-+		if (vertexSource.empty() || fragmentSource.empty())
- 		{
+-		{
 -			switch (stage)
 -			{
 -			case GL_VERTEX_SHADER:    return ".cached_vulkan.vert";
@@ -373,8 +371,10 @@ index eccf203..5b8b2ee 100644
 -			}
 -			TC_Core_Assert(false);
 -			return "";
-+			TC_Core_Error("Shader '{0}' is missing a vertex or fragment stage", filepath);
-+			return;
++			if (currentType == GL_VERTEX_SHADER)
++				vertexSource += line + "\n";
++			else if (currentType == GL_FRAGMENT_SHADER)
++				fragmentSource += line + "\n";
  		}
  
 -
@@ -390,19 +390,24 @@ index eccf203..5b8b2ee 100644
 -		std::string source = ReadFile(filepath);
 -		auto shaderSources = PreProcess(source);
 -
--		{
++		if (vertexSource.empty() || fragmentSource.empty())
+ 		{
 -			Timer timer;
 -			CompileOrGetVulkanBinaries(shaderSources);
 -			CompileOrGetOpenGLBinaries();
 -			CreateProgram();
 -			TC_Core_Warn("Shader creation took {0} ms", timer.ElapsedMillis());
 -			
--		}
-+		CreateProgram(ToGLES3(vertexSource, false), ToGLES3(fragmentSource, true));
++			TC_Core_Error("Shader '{0}' is missing a vertex or fragment stage", filepath);
++			return;
+ 		}
  
++		CreateProgram(ToGLES3(vertexSource, false), ToGLES3(fragmentSource, true));
++
  		// Extract name from filepath
  		auto lastSlash = filepath.find_last_of("/\\");
-@@ -121,20 +79,15 @@ namespace TomCat {
+ 		lastSlash = lastSlash == std::string::npos ? 0 : lastSlash + 1;
+@@ -121,20 +83,15 @@ namespace TomCat {
  	{
  		TC_PROFILE_FUNCTION();
  
@@ -426,7 +431,7 @@ index eccf203..5b8b2ee 100644
  	}
  
  	std::string OpenGLShader::ReadFile(const std::string& filepath)
-@@ -142,12 +95,12 @@ namespace TomCat {
+@@ -142,12 +99,12 @@ namespace TomCat {
  		TC_PROFILE_FUNCTION();
  
  		std::string result;
@@ -441,90 +446,57 @@ index eccf203..5b8b2ee 100644
  			{
  				result.resize(size);
  				in.seekg(0, std::ios::beg);
-@@ -166,320 +119,187 @@ namespace TomCat {
+@@ -166,320 +123,325 @@ namespace TomCat {
  		return result;
  	}
  
 -	std::unordered_map<GLenum, std::string> OpenGLShader::PreProcess(const std::string& source)
++	static std::string RewriteStageInterface(std::string source, bool fragment);
++
 +	std::string OpenGLShader::ToGLES3(const std::string& source, bool fragment) const
  	{
 -		TC_PROFILE_FUNCTION();
 +		std::string converted = source;
  
 -		std::unordered_map<GLenum, std::string> shaderSources;
--
++		// TomCat shaders target desktop GLSL; WebGL2 accepts GLSL ES 3.00.
++		for (const char* desktopVersion : { "#version 450 core", "#version 410 core", "#version 330 core" })
++		{
++			size_t at = converted.find(desktopVersion);
++			if (at != std::string::npos)
++				converted.replace(at, strlen(desktopVersion), "#version 300 es");
++		}
+ 
 -		const char* typeToken = "#type";
 -		size_t typeTokenLength = strlen(typeToken);
 -		size_t pos = source.find(typeToken, 0); //Start of shader type declaration line
 -		while (pos != std::string::npos)
-+		// TomCat shaders target desktop GLSL; WebGL2 accepts GLSL ES 3.00.
-+		for (const char* desktopVersion : { "#version 450 core", "#version 410 core", "#version 330 core" })
++		// Precision qualifiers are required in fragment shaders.
++		if (fragment)
  		{
 -			size_t eol = source.find_first_of("\r\n", pos); //End of shader type declaration line
 -			TC_Core_Assert(eol != std::string::npos, "Syntax error");
 -			size_t begin = pos + typeTokenLength + 1; //Start of shader type name (after "#type " keyword)
 -			std::string type = source.substr(begin, eol - begin);
 -			TC_Core_Assert(Utils::ShaderTypeFromString(type), "Invalid shader type specified");
--
--			size_t nextLinePos = source.find_first_not_of("\r\n", eol); //Start of shader code after shader type declaration line
--			TC_Core_Assert(nextLinePos != std::string::npos, "Syntax error");
--			pos = source.find(typeToken, nextLinePos); //Start of next shader type declaration line
--
--			shaderSources[Utils::ShaderTypeFromString(type)] = (pos == std::string::npos) ? source.substr(nextLinePos) : source.substr(nextLinePos, pos - nextLinePos);
-+			size_t at = converted.find(desktopVersion);
-+			if (at != std::string::npos)
-+				converted.replace(at, strlen(desktopVersion), "#version 300 es");
- 		}
- 
--		return shaderSources;
--	}
--
--	void OpenGLShader::CompileOrGetVulkanBinaries(const std::unordered_map<GLenum, std::string>& shaderSources)
--	{
--		GLuint program = glCreateProgram();
--
--		shaderc::Compiler compiler;
--		shaderc::CompileOptions options;
--		options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_2);
--		const bool optimize = true;
--		if (optimize)
--			options.SetOptimizationLevel(shaderc_optimization_level_performance);
--
--		std::filesystem::path cacheDirectory = Utils::GetCacheDirectory();
--
--		auto& shaderData = m_VulkanSPIRV;
--		shaderData.clear();
--		for (auto&& [stage, source] : shaderSources)
-+		// Precision qualifiers are required in fragment shaders.
-+		if (fragment)
- 		{
--			std::filesystem::path shaderFilePath = m_FilePath;
--			std::filesystem::path cachedPath = cacheDirectory / (shaderFilePath.filename().string() + Utils::GLShaderStageCachedVulkanFileExtension(stage));
 +			size_t versionEnd = converted.find('\n');
 +			if (versionEnd != std::string::npos)
 +				converted.insert(versionEnd + 1, "precision highp float;\n");
 +		}
  
--			std::ifstream in(cachedPath, std::ios::in | std::ios::binary);
--			if (in.is_open())
+-			size_t nextLinePos = source.find_first_not_of("\r\n", eol); //Start of shader code after shader type declaration line
+-			TC_Core_Assert(nextLinePos != std::string::npos, "Syntax error");
+-			pos = source.find(typeToken, nextLinePos); //Start of next shader type declaration line
 +		// Uniform block binding and sampler bindings are desktop GL 4.2+
 +		// qualifiers.  Bind the block and the sampler units programmatically.
 +		{
 +			const char* blockBinding = "layout(std140, binding = 0)";
 +			size_t at = converted.find(blockBinding);
 +			while (at != std::string::npos)
- 			{
--				in.seekg(0, std::ios::end);
--				auto size = in.tellg();
--				in.seekg(0, std::ios::beg);
--
--				auto& data = shaderData[stage];
--				data.resize(size / sizeof(uint32_t));
--				in.read((char*)data.data(), size);
++			{
 +				converted.replace(at, strlen(blockBinding), "layout(std140)");
 +				at = converted.find(blockBinding, at + 1);
- 			}
--			else
++			}
 +		}
 +		{
 +			const char* samplerBinding = "layout (binding = 0) uniform";
@@ -540,38 +512,159 @@ index eccf203..5b8b2ee 100644
 +			const char* samplerBindingTight = "layout(binding = 0) uniform";
 +			size_t at = converted.find(samplerBindingTight);
 +			while (at != std::string::npos)
++			{
++				converted.erase(at, strlen(samplerBindingTight));
++				converted.insert(at, "uniform");
++				at = converted.find(samplerBindingTight, at + 1);
++			}
++		}
+ 
+-			shaderSources[Utils::ShaderTypeFromString(type)] = (pos == std::string::npos) ? source.substr(nextLinePos) : source.substr(nextLinePos, pos - nextLinePos);
++		// WebGL2 guarantees 16 fragment texture units; drop the extra slots
++		// that desktop GL 4.1 allowed.
++		{
++			const std::string from = "u_Textures[32]";
++			size_t at = converted.find(from);
++			if (at != std::string::npos)
++				converted.replace(at, from.size(), "u_Textures[16]");
+ 		}
+ 
+-		return shaderSources;
++		converted = RewriteStageInterface(std::move(converted), fragment);
++		return converted;
+ 	}
+ 
+-	void OpenGLShader::CompileOrGetVulkanBinaries(const std::unordered_map<GLenum, std::string>& shaderSources)
++	// GLSL ES 3.00 matching happens by varying name, and location qualifiers
++	// are only legal on vertex attribute inputs.  Expand the struct interface,
++	// drop the editor entity-id second render target, and emit plain varyings.
++	static std::string RewriteStageInterface(std::string source, bool fragment)
+ 	{
+-		GLuint program = glCreateProgram();
+-
+-		shaderc::Compiler compiler;
+-		shaderc::CompileOptions options;
+-		options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_2);
+-		const bool optimize = true;
+-		if (optimize)
+-			options.SetOptimizationLevel(shaderc_optimization_level_performance);
+-
+-		std::filesystem::path cacheDirectory = Utils::GetCacheDirectory();
++		std::string output;
++		bool skippingStruct = false;
++		std::istringstream stream(source);
++		std::string line;
+ 
+-		auto& shaderData = m_VulkanSPIRV;
+-		shaderData.clear();
+-		for (auto&& [stage, source] : shaderSources)
++		while (std::getline(stream, line))
+ 		{
+-			std::filesystem::path shaderFilePath = m_FilePath;
+-			std::filesystem::path cachedPath = cacheDirectory / (shaderFilePath.filename().string() + Utils::GLShaderStageCachedVulkanFileExtension(stage));
++			if (skippingStruct)
++			{
++				if (line == "};")
++					skippingStruct = false;
++				continue;
++			}
+ 
+-			std::ifstream in(cachedPath, std::ios::in | std::ios::binary);
+-			if (in.is_open())
++			if (line.find("struct VertexOutput") == 0)
+ 			{
+-				in.seekg(0, std::ios::end);
+-				auto size = in.tellg();
+-				in.seekg(0, std::ios::beg);
++				skippingStruct = true;
++				continue;
++			}
+ 
+-				auto& data = shaderData[stage];
+-				data.resize(size / sizeof(uint32_t));
+-				in.read((char*)data.data(), size);
++			if (!fragment && line.find("layout (location = 0) out VertexOutput Output;") == 0)
++			{
++				output += "out vec4 v_Color;\n";
++				output += "out vec2 v_TexCoord;\n";
++				output += "out float v_TilingFactor;\n";
++				output += "flat out float v_TexIndex;\n";
++				continue;
+ 			}
+-			else
++			if (fragment && line.find("layout (location = 0) in VertexOutput Input;") == 0)
++			{
++				output += "in vec4 v_Color;\n";
++				output += "in vec2 v_TexCoord;\n";
++				output += "in float v_TilingFactor;\n";
++				output += "flat in float v_TexIndex;\n";
++				continue;
++			}
++
++			// The WebGL2 runtime draws to the default framebuffer with one
++			// color target; entity-id picking needs a desktop editor FBO.
++			if (line.find("v_EntityID") != std::string::npos)
++				continue;
++			if (fragment && line.find("out int color2") != std::string::npos)
++				continue;
++			if (fragment && line.find("layout") == 0 && line.find("v_TexIndex") != std::string::npos)
++				continue;
++			if (!fragment && line.find("layout") == 0 && line.find("v_TexIndex") != std::string::npos)
++				continue;
++
++			if (fragment)
  			{
 -				shaderc::SpvCompilationResult module = compiler.CompileGlslToSpv(source, Utils::GLShaderStageToShaderC(stage), m_FilePath.c_str(), options);
 -				if (module.GetCompilationStatus() != shaderc_compilation_status_success)
--				{
++				// Remove texture-branch cases that reference the dropped
++				// sampler slots.
++				if (line.find("u_Textures[") != std::string::npos)
+ 				{
 -					TC_Core_Error(module.GetErrorMessage());
 -					TC_Core_Assert(false);
--				}
--
++					size_t open = line.find('[');
++					size_t close = line.find(']', open);
++					if (open != std::string::npos && close != std::string::npos)
++					{
++						int index = std::atoi(line.substr(open + 1, close - open - 1).c_str());
++						if (index >= 16 && line.find("case ") != std::string::npos)
++							continue;
++					}
+ 				}
+ 
 -				shaderData[stage] = std::vector<uint32_t>(module.cbegin(), module.cend());
--
++				if (line.find("layout (location = 0) out vec4 color;") == 0)
++					line = "out vec4 FragColor;";
++				else if (line.find("color = ") == 0)
++					line.replace(0, 5, "FragColor");
+ 
 -				std::ofstream out(cachedPath, std::ios::out | std::ios::binary);
 -				if (out.is_open())
--				{
+ 				{
 -					auto& data = shaderData[stage];
 -					out.write((char*)data.data(), data.size() * sizeof(uint32_t));
 -					out.flush();
 -					out.close();
--				}
-+				converted.erase(at, strlen(samplerBindingTight));
-+				converted.insert(at, "uniform");
-+				at = converted.find(samplerBindingTight, at + 1);
- 			}
- 		}
- 
++					size_t at = line.find("Input.Color");
++					if (at != std::string::npos) line.replace(at, 11, "v_Color");
++				}
++				{
++					size_t at = line.find("Input.TexCoord");
++					if (at != std::string::npos) line.replace(at, 14, "v_TexCoord");
++				}
++				{
++					size_t at = line.find("Input.TilingFactor");
++					if (at != std::string::npos) line.replace(at, 18, "v_TilingFactor");
+ 				}
+-			}
+-		}
+-
 -		for (auto&& [stage, data] : shaderData)
 -			Reflect(stage, data);
-+		return converted;
- 	}
- 
+-	}
+-
 -	void OpenGLShader::CompileOrGetOpenGLBinaries()
-+	void OpenGLShader::CreateProgram(const std::string& vertexSource, const std::string& fragmentSource)
- 	{
+-	{
 -		auto& shaderData = m_OpenGLSPIRV;
 -
 -		shaderc::Compiler compiler;
@@ -586,8 +679,7 @@ index eccf203..5b8b2ee 100644
 -		shaderData.clear();
 -		m_OpenGLSourceCode.clear();
 -		for (auto&& [stage, spirv] : m_VulkanSPIRV)
-+		auto compile = [](GLenum type, const std::string& source) -> GLuint
- 		{
+-		{
 -			std::filesystem::path shaderFilePath = m_FilePath;
 -			std::filesystem::path cachedPath = cacheDirectory / (shaderFilePath.filename().string() + Utils::GLShaderStageCachedOpenGLFileExtension(stage));
 -
@@ -601,8 +693,76 @@ index eccf203..5b8b2ee 100644
 -				auto& data = shaderData[stage];
 -				data.resize(size / sizeof(uint32_t));
 -				in.read((char*)data.data(), size);
--			}
--			else
+ 			}
+ 			else
+ 			{
+-				spirv_cross::CompilerGLSL glslCompiler(spirv);
+-				m_OpenGLSourceCode[stage] = glslCompiler.compile();
+-				auto& source = m_OpenGLSourceCode[stage];
+-
+-				shaderc::SpvCompilationResult module = compiler.CompileGlslToSpv(source, Utils::GLShaderStageToShaderC(stage), m_FilePath.c_str());
+-				if (module.GetCompilationStatus() != shaderc_compilation_status_success)
+ 				{
+-					TC_Core_Error(module.GetErrorMessage());
+-					TC_Core_Assert(false);
++					size_t at = line.find("Output.Color");
++					if (at != std::string::npos) line.replace(at, 12, "v_Color");
+ 				}
++				{
++					size_t at = line.find("Output.TexCoord");
++					if (at != std::string::npos) line.replace(at, 15, "v_TexCoord");
++				}
++				{
++					size_t at = line.find("Output.TilingFactor");
++					if (at != std::string::npos) line.replace(at, 19, "v_TilingFactor");
++				}
++			}
+ 
+-				shaderData[stage] = std::vector<uint32_t>(module.cbegin(), module.cend());
+-
+-				std::ofstream out(cachedPath, std::ios::out | std::ios::binary);
+-				if (out.is_open())
++			{
++				size_t at = line.find("out flat");
++				while (at != std::string::npos)
+ 				{
+-					auto& data = shaderData[stage];
+-					out.write((char*)data.data(), data.size() * sizeof(uint32_t));
+-					out.flush();
+-					out.close();
++					line.replace(at, 8, "flat out");
++					at = line.find("out flat", at + 1);
+ 				}
+ 			}
++			{
++				size_t at = line.find("in flat");
++				while (at != std::string::npos)
++				{
++					line.replace(at, 7, "flat in");
++					at = line.find("in flat", at + 1);
++				}
++			}
++
++			output += line + "\n";
+ 		}
++
++		return output;
+ 	}
+ 
+-	void OpenGLShader::CreateProgram()
++	void OpenGLShader::CreateProgram(const std::string& vertexSource, const std::string& fragmentSource)
+ 	{
+-		GLuint program = glCreateProgram();
+-
+-		std::vector<GLuint> shaderIDs;
+-		for (auto&& [stage, spirv] : m_OpenGLSPIRV)
++		auto compile = [](GLenum type, const std::string& source) -> GLuint
+ 		{
+-			GLuint shaderID = shaderIDs.emplace_back(glCreateShader(stage));
+-			glShaderBinary(1, &shaderID, GL_SHADER_BINARY_FORMAT_SPIR_V, spirv.data(), spirv.size() * sizeof(uint32_t));
+-			glSpecializeShader(shaderID, "main", 0, nullptr, nullptr);
+-			glAttachShader(program, shaderID);
+-		}
 +			const GLchar* cSource = source.c_str();
 +			GLuint shader = glCreateShader(type);
 +			glShaderSource(shader, 1, &cSource, nullptr);
@@ -611,28 +771,7 @@ index eccf203..5b8b2ee 100644
 +			GLint isCompiled = 0;
 +			glGetShaderiv(shader, GL_COMPILE_STATUS, &isCompiled);
 +			if (isCompiled == GL_FALSE)
- 			{
--				spirv_cross::CompilerGLSL glslCompiler(spirv);
--				m_OpenGLSourceCode[stage] = glslCompiler.compile();
--				auto& source = m_OpenGLSourceCode[stage];
--
--				shaderc::SpvCompilationResult module = compiler.CompileGlslToSpv(source, Utils::GLShaderStageToShaderC(stage), m_FilePath.c_str());
--				if (module.GetCompilationStatus() != shaderc_compilation_status_success)
--				{
--					TC_Core_Error(module.GetErrorMessage());
--					TC_Core_Assert(false);
--				}
--
--				shaderData[stage] = std::vector<uint32_t>(module.cbegin(), module.cend());
--
--				std::ofstream out(cachedPath, std::ios::out | std::ios::binary);
--				if (out.is_open())
--				{
--					auto& data = shaderData[stage];
--					out.write((char*)data.data(), data.size() * sizeof(uint32_t));
--					out.flush();
--					out.close();
--				}
++			{
 +				GLint maxLength = 0;
 +				glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &maxLength);
 +				std::string log(static_cast<size_t>(maxLength), '\0');
@@ -640,42 +779,18 @@ index eccf203..5b8b2ee 100644
 +				TC_Core_Error("Shader compilation failure:\n{0}", log);
 +				glDeleteShader(shader);
 +				return 0;
- 			}
--		}
--	}
++			}
  
--	void OpenGLShader::CreateProgram()
--	{
--		GLuint program = glCreateProgram();
+-		glLinkProgram(program);
 +			return shader;
 +		};
  
--		std::vector<GLuint> shaderIDs;
--		for (auto&& [stage, spirv] : m_OpenGLSPIRV)
+-		GLint isLinked;
+-		glGetProgramiv(program, GL_LINK_STATUS, &isLinked);
+-		if (isLinked == GL_FALSE)
 +		GLuint vertexShader = compile(GL_VERTEX_SHADER, vertexSource);
 +		GLuint fragmentShader = compile(GL_FRAGMENT_SHADER, fragmentSource);
 +		if (!vertexShader || !fragmentShader)
- 		{
--			GLuint shaderID = shaderIDs.emplace_back(glCreateShader(stage));
--			glShaderBinary(1, &shaderID, GL_SHADER_BINARY_FORMAT_SPIR_V, spirv.data(), spirv.size() * sizeof(uint32_t));
--			glSpecializeShader(shaderID, "main", 0, nullptr, nullptr);
--			glAttachShader(program, shaderID);
-+			if (vertexShader) glDeleteShader(vertexShader);
-+			if (fragmentShader) glDeleteShader(fragmentShader);
-+			return;
- 		}
- 
--		glLinkProgram(program);
-+		m_RendererID = glCreateProgram();
-+		glAttachShader(m_RendererID, vertexShader);
-+		glAttachShader(m_RendererID, fragmentShader);
-+		glLinkProgram(m_RendererID);
- 
--		GLint isLinked;
--		glGetProgramiv(program, GL_LINK_STATUS, &isLinked);
-+		GLint isLinked = 0;
-+		glGetProgramiv(m_RendererID, GL_LINK_STATUS, &isLinked);
- 		if (isLinked == GL_FALSE)
  		{
 -			GLint maxLength;
 -			glGetProgramiv(program, GL_INFO_LOG_LENGTH, &maxLength);
@@ -688,6 +803,23 @@ index eccf203..5b8b2ee 100644
 -
 -			for (auto id : shaderIDs)
 -				glDeleteShader(id);
++			if (vertexShader) glDeleteShader(vertexShader);
++			if (fragmentShader) glDeleteShader(fragmentShader);
++			return;
+ 		}
+ 
+-		for (auto id : shaderIDs)
++		m_RendererID = glCreateProgram();
++		glAttachShader(m_RendererID, vertexShader);
++		glAttachShader(m_RendererID, fragmentShader);
++		glLinkProgram(m_RendererID);
++
++		GLint isLinked = 0;
++		glGetProgramiv(m_RendererID, GL_LINK_STATUS, &isLinked);
++		if (isLinked == GL_FALSE)
+ 		{
+-			glDetachShader(program, id);
+-			glDeleteShader(id);
 +			GLint maxLength = 0;
 +			glGetProgramiv(m_RendererID, GL_INFO_LOG_LENGTH, &maxLength);
 +			std::string log(static_cast<size_t>(maxLength), '\0');
@@ -696,14 +828,6 @@ index eccf203..5b8b2ee 100644
 +			glDeleteProgram(m_RendererID);
 +			m_RendererID = 0;
  		}
- 
--		for (auto id : shaderIDs)
--		{
--			glDetachShader(program, id);
--			glDeleteShader(id);
--		}
-+		glDeleteShader(vertexShader);
-+		glDeleteShader(fragmentShader);
  
 -		m_RendererID = program;
 -	}
@@ -716,7 +840,9 @@ index eccf203..5b8b2ee 100644
 -		TC_Core_Trace("OpenGLShader::Reflect - {0} {1}", Utils::GLShaderStageToString(stage), m_FilePath);
 -		TC_Core_Trace("    {0} uniform buffers", resources.uniform_buffers.size());
 -		TC_Core_Trace("    {0} resources", resources.sampled_images.size());
--
++		glDeleteShader(vertexShader);
++		glDeleteShader(fragmentShader);
+ 
 -		TC_Core_Trace("Uniform buffers:");
 -		for (const auto& resource : resources.uniform_buffers)
 +		if (m_RendererID)
@@ -760,13 +886,13 @@ index eccf203..5b8b2ee 100644
 +		auto it = m_UniformLocationCache.find(name);
 +		if (it != m_UniformLocationCache.end())
 +			return it->second;
-+
+ 
+-		UploadUniformInt(name, value);
 +		int location = m_RendererID ? glGetUniformLocation(m_RendererID, name.c_str()) : -1;
 +		m_UniformLocationCache[name] = location;
 +		return location;
 +	}
- 
--		UploadUniformInt(name, value);
++
 +	void OpenGLShader::SetInt(const std::string& name, int value)
 +	{
 +		int location = GetUniformLocation(name);
@@ -1113,3 +1239,35 @@ index fdb261e..85e11ed 100644
 -}
 \ No newline at end of file
 +}
+diff --git a/TomCat/vendor/ImGui/backends/imgui_impl_glfw.cpp b/TomCat/vendor/ImGui/backends/imgui_impl_glfw.cpp
+index 9f8687b..1fa9a03 100644
+--- a/TomCat/vendor/ImGui/backends/imgui_impl_glfw.cpp
++++ b/TomCat/vendor/ImGui/backends/imgui_impl_glfw.cpp
+@@ -116,6 +116,18 @@
+ #define GLFW_HAS_GAMEPAD_API            (GLFW_VERSION_COMBINED >= 3300) // 3.3+ glfwGetGamepadState() new api
+ #define GLFW_HAS_GETKEYNAME             (GLFW_VERSION_COMBINED >= 3200) // 3.2+ glfwGetKeyName()
+ 
++#ifdef __EMSCRIPTEN__
++// Emscripten's GLFW3 JS backend implements the browser window/input subset.
++// Disable desktop APIs that the WASM library does not provide so that the
++// ImGui GLFW backend compiles and links for WebGL2.
++#undef GLFW_HAS_VULKAN
++#define GLFW_HAS_VULKAN                 0
++#undef GLFW_HAS_GAMEPAD_API
++#define GLFW_HAS_GAMEPAD_API            0
++#undef GLFW_HAS_GETKEYNAME
++#define GLFW_HAS_GETKEYNAME             0
++#endif
++
+ // GLFW data
+ enum GlfwClientApi
+ {
+@@ -586,7 +598,7 @@ static bool ImGui_ImplGlfw_Init(GLFWwindow* window, bool install_callbacks, Glfw
+     bd->MouseCursors[ImGuiMouseCursor_NotAllowed] = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
+ #endif
+     glfwSetErrorCallback(prev_error_callback);
+-#if (GLFW_VERSION_COMBINED >= 3300) // Eat errors (see #5785)
++#if (GLFW_VERSION_COMBINED >= 3300) && !defined(__EMSCRIPTEN__) // Eat errors (see #5785)
+     (void)glfwGetError(NULL);
+ #endif
+ 

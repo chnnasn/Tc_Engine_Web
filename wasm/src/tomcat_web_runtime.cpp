@@ -11,6 +11,10 @@
 #include "TomCat/Scene/Entity.h"
 #include "TomCat/Scene/Scene.h"
 
+#include "imgui.h"
+#include "backends/imgui_impl_glfw.h"
+#include "backends/imgui_impl_opengl3.h"
+
 namespace {
 
 TomCat::Scene* g_scene = nullptr;
@@ -78,6 +82,16 @@ int tc_web_runtime_boot(int width, int height)
 
 	TomCat::Renderer::Init();
 
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO();
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	io.Fonts->AddFontFromFileTTF("/Packages/fonts/opensans/OpenSans-Regular.ttf", 18.0f);
+	ImGui::StyleColorsDark();
+	ImGui_ImplGlfw_InitForOpenGL(g_window, true);
+	ImGui_ImplOpenGL3_Init("#version 300 es");
+	TC_Core_Info("Dear ImGui {0} initialized for WebGL2", ImGui::GetVersion());
+
 	g_scene = new TomCat::Scene();
 	g_scene->OnViewportResize(g_width, g_height);
 	BuildDemoScene(*g_scene);
@@ -96,6 +110,23 @@ void tc_web_runtime_frame(double seconds)
 
 	g_scene->OnUpdateRuntime(TomCat::Timestep((float)seconds));
 	g_scene->OnRenderRuntime();
+
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+	{
+		ImGui::Begin("TomCat Engine");
+		ImGui::Text("Dear ImGui %s", ImGui::GetVersion());
+		ImGui::Separator();
+		ImGui::Text("Runtime: WebGL2 / Emscripten GLFW");
+		ImGui::Text("Viewport: %u x %u", g_width, g_height);
+		ImGui::Text("Rendering scene: %s", g_scene ? "running" : "stopped");
+		ImGui::TextDisabled("Engine sources: Scene / Renderer2D / Box2D");
+		ImGui::End();
+	}
+	ImGui::Render();
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
 	glfwSwapBuffers(g_window);
 
 	TomCatWeb::Bridge::instance().frame(seconds);
@@ -112,6 +143,9 @@ void tc_web_runtime_shutdown()
 	}
 
 	TomCat::Renderer::Shutdown();
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
 	if (g_window)
 	{
 		glfwDestroyWindow(g_window);

@@ -71,6 +71,26 @@ add_library(tomcat_yaml_cpp STATIC ${TC_YAML_SOURCES})
 target_include_directories(tomcat_yaml_cpp PUBLIC "${TC_YAML_SRC}/include")
 target_compile_definitions(tomcat_yaml_cpp PUBLIC YAML_CPP_STATIC_DEFINE)
 
+# Dear ImGui ships with the upstream engine commit (vendored source, not a
+# submodule).  The GLFW and OpenGL3 backends compile against Emscripten's
+# WebGL2 GLFW/GLES3 environment, exactly like the WebGui reference does.
+set(TC_IMGUI_DIR "${TC_ENGINE}/TomCat/vendor/ImGui")
+add_library(tomcat_imgui STATIC
+  "${TC_IMGUI_DIR}/imgui.cpp"
+  "${TC_IMGUI_DIR}/imgui_draw.cpp"
+  "${TC_IMGUI_DIR}/imgui_tables.cpp"
+  "${TC_IMGUI_DIR}/imgui_widgets.cpp"
+  "${TC_IMGUI_DIR}/backends/imgui_impl_glfw.cpp"
+  "${TC_IMGUI_DIR}/backends/imgui_impl_opengl3.cpp"
+  "${TC_ENGINE_SRC}/TomCat/ImGui/ImGuiCallback.cpp")
+target_include_directories(tomcat_imgui PUBLIC
+  "${TC_ENGINE_SRC}"
+  "${TC_ENGINE}/TomCat/vendor/spdlog/include"
+  "${TC_ENGINE}/TomCat/vendor/glm"
+  "${TC_IMGUI_DIR}"
+  "${TC_IMGUI_DIR}/backends")
+target_compile_definitions(tomcat_imgui PUBLIC IMGUI_IMPL_OPENGL_ES3=1)
+
 set(TC_BOX2D_DIR "${TC_ENGINE}/TomCat/vendor/Box2D")
 set(BOX2D_BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
 set(BOX2D_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -135,7 +155,8 @@ if(TOMCAT_WEB_EMSCRIPTEN)
     "-sUSE_GLFW=3")
   target_link_libraries(tomcat_web_module PRIVATE
     tomcat_web
-    tomcat_engine_core)
+    tomcat_engine_core
+    tomcat_imgui)
   target_link_options(tomcat_web_module PRIVATE
     "SHELL:-sMODULARIZE=1"
     "SHELL:-sEXPORT_NAME=TomCatWebModule"

@@ -27,7 +27,12 @@
       canvas: document.getElementById('canvas'),
       locateFile: (name) => './' + name
     }).then((module) => {
-      const result = module._tc_web_runtime_boot(1280, 720);
+      const canvas = document.getElementById('canvas');
+      const width = canvas.clientWidth || window.innerWidth;
+      const height = canvas.clientHeight || window.innerHeight;
+      canvas.width = width;
+      canvas.height = height;
+      const result = module._tc_web_runtime_boot(width, height);
       if (result !== 0) {
         setLog('tc_web_runtime_boot 失败: ' + result);
         return;
