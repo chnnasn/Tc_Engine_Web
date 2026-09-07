@@ -8,9 +8,12 @@ wasm/build-*/
 *.wasm
 build_wasm*.log
 
-# Emscripten artifacts are assembled by the CI pipeline (see .github/workflows)
+# The checked-in WASM runtime is consumed by the Netlify build.
 wasm/public/runtime/tomcat_web_module.js
 wasm/public/runtime/tomcat_web_module.data
+!wasm/public/runtime/tomcat_web_module.js
+!wasm/public/runtime/tomcat_web_module.data
+!wasm/public/runtime/tomcat_web_module.wasm
 
 # Local configuration
 .env
