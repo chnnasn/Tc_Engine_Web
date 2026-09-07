@@ -18,6 +18,8 @@ jobs:
         with:
           node-version: 22
       - run: node --test bridge/*.test.mjs
+      - run: npm ci
+      - run: npm run build
 
   build-wasm:
     runs-on: ubuntu-latest
@@ -30,17 +32,20 @@ jobs:
         run: emcmake cmake -S wasm -B build/wasm -DTOMCAT_WEB_EMSCRIPTEN=ON -DTOMCAT_ENGINE_SOURCE=$GITHUB_WORKSPACE/.engine/TomCat_Engine
       - name: Build
         run: cmake --build build/wasm --config Release
+      - name: Stage generated WASM runtime for Vite
+        run: |
+          mkdir -p wasm/public/runtime
+          cp build/wasm/tomcat_web_module.js wasm/public/runtime/
+          cp build/wasm/tomcat_web_module.wasm wasm/public/runtime/
+          cp build/wasm/tomcat_web_module.data wasm/public/runtime/
       - name: Smoke test module exports
         run: |
           cd build/wasm
           node -e "const f=require('./tomcat_web_module.js'); f({locateFile:p=>'./'+p,noInitialRun:true}).then(m=>{for(const n of ['_tc_web_runtime_boot','_tc_web_runtime_frame','_tc_web_runtime_shutdown','_tc_web_boot','_tc_web_platform_resize','_tc_web_storage_mount','_tc_web_storage_sync','_tc_web_project_create','_tc_web_scene_save']) if(typeof m[n]!=='function') throw new Error('missing export '+n); if(!m.HEAPU8) throw new Error('HEAPU8 runtime export missing'); console.log('module exports ok');}).catch(e=>{console.error(e);process.exit(1)})"
-      - name: Assemble site
+      - name: Build React frontend
         run: |
-          mkdir -p dist/runtime
-          cp -R wasm/public/. dist/
-          cp build/wasm/tomcat_web_module.js dist/runtime/
-          cp build/wasm/tomcat_web_module.wasm dist/runtime/
-          cp build/wasm/tomcat_web_module.data dist/runtime/
+          npm ci
+          npm run build
       - uses: actions/upload-artifact@v4
         with:
           name: tc-engine-web
