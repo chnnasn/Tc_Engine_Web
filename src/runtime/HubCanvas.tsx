@@ -66,7 +66,7 @@ export default function HubCanvas() {
   }, [])
 
   return <main className="runtime-page">
-    <canvas ref={canvasRef} tabIndex={0} aria-label="TomCat Hub Dear ImGui WebGL2" onPointerDown={(event) => { canvasRef.current?.focus(); canvasRef.current?.setPointerCapture(event.pointerId); }} onPointerUp={(event) => { if (canvasRef.current?.hasPointerCapture(event.pointerId)) canvasRef.current.releasePointerCapture(event.pointerId); }} onPointerCancel={(event) => { if (canvasRef.current?.hasPointerCapture(event.pointerId)) canvasRef.current.releasePointerCapture(event.pointerId); }} onMouseDown={() => canvasRef.current?.focus()} onContextMenu={(event) => event.preventDefault()} onDragStart={(event) => event.preventDefault()} />
+    <canvas ref={canvasRef} tabIndex={0} aria-label="TomCat Hub Dear ImGui WebGL2" onPointerDown={(event) => { canvasRef.current?.focus(); canvasRef.current?.setPointerCapture(event.pointerId); }} onPointerUp={(event) => { if (canvasRef.current?.hasPointerCapture(event.pointerId)) canvasRef.current.releasePointerCapture(event.pointerId); }} onPointerCancel={(event) => { if (canvasRef.current?.hasPointerCapture(event.pointerId)) canvasRef.current.releasePointerCapture(event.pointerId); }} onMouseDown={(event) => { canvasRef.current?.focus(); if (event.button === 2) event.preventDefault(); }} onContextMenu={(event) => event.preventDefault()} onDragStart={(event) => event.preventDefault()} />
     {error ? <div className="runtime-loading runtime-error"><strong>TomCat Hub 启动失败</strong><span>{error}</span></div> : !ready && <div className="runtime-loading"><strong>TomCat Hub</strong><span>{status}</span></div>}
   </main>
 }

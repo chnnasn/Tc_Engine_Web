@@ -174,13 +174,12 @@ index 06cc6de..798158b 100644
  			ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
  		}
  
-@@ -297,7 +343,9 @@ namespace TomCat {
+@@ -297,7 +343,8 @@ namespace TomCat {
  
  		m_ViewportFocused = ImGui::IsWindowFocused();
  		m_ViewportHovered = ImGui::IsWindowHovered();
-+#ifndef __EMSCRIPTEN__
++		// Keep the ImGui capture boundary in sync with the Scene viewport on WebGL.
  		Application::Get().GetImGuiLayer()->BlockEvents(!m_ViewportFocused && !m_ViewportHovered);
-+#endif
  
  		ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
  		m_ViewportSize = { viewportPanelSize.x, viewportPanelSize.y };
