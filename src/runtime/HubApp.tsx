@@ -1,5 +1,1 @@
-import HubCanvas from './HubCanvas'
-
-export default function HubApp() {
-  return <HubCanvas />
-}
+export { default } from './HubApp.vue'

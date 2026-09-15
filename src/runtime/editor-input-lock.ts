@@ -1,4 +1,4 @@
-import type { RefObject } from 'react'
+import type { Ref } from 'vue'
 
 /**
  * Keep browser defaults out of the WebGL editor while its canvas owns focus.
@@ -6,9 +6,9 @@ import type { RefObject } from 'react'
  * The GLFW bridge still receives every event because these listeners only
  * cancel the browser default; they deliberately do not stop propagation.
  */
-export function installEditorInputLock(canvasRef: RefObject<HTMLCanvasElement | null>) {
+export function installEditorInputLock(canvasRef: Ref<HTMLCanvasElement | null>) {
   const isOwned = (event: Event) => {
-    const canvas = canvasRef.current
+    const canvas = canvasRef.value
     if (!canvas) return false
     const target = event.target
     return document.activeElement === canvas || target === canvas || (target instanceof Node && canvas.contains(target))

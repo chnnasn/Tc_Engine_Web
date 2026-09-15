@@ -77,7 +77,7 @@ C++ 侧仍需完成的移植：
 
 ### 编辑 API
 
-`src/platform/tomcat-protocol.ts` 定义了 `tomcat.web.v1` RPC，并提供 React 可调用的
+`src/platform/tomcat-protocol.ts` 定义了 `tomcat.web.v1` RPC，并提供 Vue 可调用的
 `EngineRpcClient`。第一批命令包括：
 
 - `system.capabilities`
@@ -89,11 +89,11 @@ C++ 侧仍需完成的移植：
 
 所有 Scene、Entity、Component、Property 和 Asset 的 64 位标识在 JavaScript 边界上使用
 十进制字符串，禁止转换为 `number`。每次事务携带 `baseRevision`，引擎只在版本一致时
-调用组件注册表和 `SceneHistory` 提交操作，并返回新的修订号。这样 React 不会绕过
+调用组件注册表和 `SceneHistory` 提交操作，并返回新的修订号。这样 Vue 不会绕过
 上游组件校验或自行维护另一套撤销栈。
 
 C++ 侧通过 `tc_web_editor_rpc` 接收 JSON。实现顺序是：能力查询和只读快照、Transform
-事务、实体增删、组件增删、资源列表，最后覆盖全部注册组件。React 只有收到成功响应后
+事务、实体增删、组件增删、资源列表，最后覆盖全部注册组件。Vue 只有收到成功响应后
 才应用引擎返回的快照；版本冲突时重新获取快照并提示用户。
 
 ### 云端保存与构建发布
