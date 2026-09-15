@@ -7,6 +7,8 @@ wasm/build-*/
 *.obj
 *.wasm
 build_wasm*.log
+bin/
+obj/
 
 # The checked-in WASM runtime is consumed by the Netlify build.
 wasm/public/runtime/tomcat_web_module.js

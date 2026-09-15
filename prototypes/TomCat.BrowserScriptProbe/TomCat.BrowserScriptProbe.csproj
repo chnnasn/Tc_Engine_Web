@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TomCatReviewRoot>$(MSBuildThisFileDirectory)..\..\upstream\review-20260915</TomCatReviewRoot>
+    <TomCatEngineRoot Condition="'$(TomCatEngineRoot)' == '' and Exists('$(TomCatReviewRoot)\Managed\TomCat.Managed\TomCat.Managed.csproj')">$(TomCatReviewRoot)</TomCatEngineRoot>
+    <TomCatEngineRoot Condition="'$(TomCatEngineRoot)' == ''">$(MSBuildThisFileDirectory)..\..\.engine\TomCat_Engine-latest</TomCatEngineRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(TomCatEngineRoot)\Managed\TomCat.Managed\TomCat.Managed.csproj" />
+    <ProjectReference Include="$(TomCatEngineRoot)\Managed\TomCat.ScriptHost\TomCat.ScriptHost.csproj" />
+    <ProjectReference Include="..\TomCat.BrowserScriptFixture\TomCat.BrowserScriptFixture.csproj"
+                      ReferenceOutputAssembly="false" />
+    <EmbeddedResource Include="..\TomCat.BrowserScriptFixture\bin\$(Configuration)\net10.0\Assembly-CSharp.dll"
+                      LogicalName="TomCat.BrowserScriptProbe.Assembly-CSharp.dll" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Assembly-CSharp</AssemblyName>
+    <RootNamespace>BrowserGame</RootNamespace>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TomCatReviewRoot>$(MSBuildThisFileDirectory)..\..\upstream\review-20260915</TomCatReviewRoot>
+    <TomCatEngineRoot Condition="'$(TomCatEngineRoot)' == '' and Exists('$(TomCatReviewRoot)\Managed\TomCat.Managed\TomCat.Managed.csproj')">$(TomCatReviewRoot)</TomCatEngineRoot>
+    <TomCatEngineRoot Condition="'$(TomCatEngineRoot)' == ''">$(MSBuildThisFileDirectory)..\..\.engine\TomCat_Engine-latest</TomCatEngineRoot>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(TomCatEngineRoot)\Managed\TomCat.Managed\TomCat.Managed.csproj" />
+    <ProjectReference Include="$(TomCatEngineRoot)\Managed\TomCat.ScriptGenerator\TomCat.ScriptGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <AdditionalFiles Include="ScriptAssets.json" />
+  </ItemGroup>
+</Project>
