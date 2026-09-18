@@ -1,34 +1,12 @@
-# Build output
-build/
-build-*/
-wasm/build/
-wasm/build-*/
-*.o
-*.obj
-*.wasm
-build_wasm*.log
-bin/
-obj/
-
-# The checked-in WASM runtime is consumed by the Netlify build.
-wasm/public/runtime/tomcat_web_module.js
-wasm/public/runtime/tomcat_web_module.data
-!wasm/public/runtime/tomcat_web_module.js
-!wasm/public/runtime/tomcat_web_module.data
-!wasm/public/runtime/tomcat_web_module.wasm
-
-# Local configuration
-.env
-.env.*
-!.env.example
-.netlify/
-.engine/
 dist/
 node_modules/
 *.tsbuildinfo
 
-# IDE / OS
-.vs/
+.env
+.env.*
+!.env.example
+.netlify/
+
 .vscode/
 .DS_Store
 Thumbs.db

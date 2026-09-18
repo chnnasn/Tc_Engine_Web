@@ -6,11 +6,6 @@
   NODE_VERSION = "22"
 
 [[headers]]
-  for = "/runtime/*.wasm"
-  [headers.values]
-    Content-Type = "application/wasm"
-
-[[headers]]
   for = "/*"
   [headers.values]
     X-Content-Type-Options = "nosniff"

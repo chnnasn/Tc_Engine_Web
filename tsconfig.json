@@ -5,6 +5,5 @@
     "strict": true, "forceConsistentCasingInFileNames": true, "module": "ESNext", "moduleResolution": "Bundler",
     "resolveJsonModule": true, "isolatedModules": true, "noEmit": true,
     "tsBuildInfoFile": "./node_modules/.cache/tomcat-web.tsbuildinfo"
-  }, "include": ["src/main.ts", "src/ui/**/*.ts", "src/ui/**/*.vue", "src/runtime/**/*.ts", "src/runtime/**/*.vue", "src/platform/**/*.ts", "src/vite-env.d.ts"],
-  "exclude": ["src/platform/*.test.ts"]
+  }, "include": ["src/main.ts", "src/ui/**/*.ts", "src/ui/**/*.vue", "src/vite-env.d.ts"]
 }
